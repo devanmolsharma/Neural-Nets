@@ -7,7 +7,7 @@ declare class GradientHandler {
     get children(): Tensor[];
     get gradient(): Tensor;
     set gradient(value: Tensor);
-    registerChildren(...children: Tensor[]): void;
+    registerChildren(children: Tensor[]): void;
     registerOperation(operation: TensorOperation): void;
     backward(previousGradient?: Tensor): void;
 }
@@ -26,24 +26,36 @@ declare class Tensor {
     backward(gradient: Tensor): void;
     toString(): string;
 }
+declare class TensorFactory {
+    static filledArray(shape: number[], fillValue?: number): NumArray | number;
+    static ones(shape: number[]): Tensor;
+    static zeros(shape: number[]): Tensor;
+    static filled(shape: number[], fillValue: number): Tensor;
+}
 declare abstract class TensorOperation extends Function {
     private _bound;
     constructor();
-    verify(...tensors: Tensor[]): void;
-    abstract forward(...tensors: NumArray[]): NumArray;
+    verify(tensors: Tensor[]): void;
+    abstract forward(tensors: NumArray[], ...kwargs: any): NumArray;
     abstract backward(gradient: NumArray): NumArray[];
+    abstract setup(tensors: Tensor[], ...kwargs: any): void;
     private _call;
     getGradient(gradient: Tensor): Tensor[];
 }
 declare class Sum extends TensorOperation {
+    private tensorCount;
     private addArrays;
     private sum;
-    forward(...tensors: NumArray[]): NumArray;
+    forward(tensors: NumArray[]): NumArray;
     backward(gradient: NumArray): NumArray[];
+    setup(tensors: Tensor[]): void;
 }
 declare class Mean extends TensorOperation {
-    forward(...tensors: NumArray[]): NumArray;
+    private shape;
+    private elementCount;
+    forward(tensors: NumArray[]): NumArray;
     backward(gradient: NumArray): NumArray[];
+    setup(tensors: Tensor[]): void;
 }
 declare const t1: Tensor, t2: Tensor, t3: Tensor;
 declare let j: any;

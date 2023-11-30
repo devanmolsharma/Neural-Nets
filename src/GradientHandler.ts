@@ -21,7 +21,7 @@ class GradientHandler {
         this._gradient = value;
     }
 
-    public registerChildren(...children: Tensor[]) {
+    public registerChildren(children: Tensor[]) {
         this._children.push(...children);
     }
 
@@ -39,7 +39,6 @@ class GradientHandler {
             throw 'cannot call backward() when the tensor is not one dimentional'
         }
         
-        console.log(temp.toString())
         if (this.Operation) {
             const childGrads = this.Operation.getGradient(temp);
 

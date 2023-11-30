@@ -15,7 +15,7 @@ class GradientHandler {
     set gradient(value) {
         this._gradient = value;
     }
-    registerChildren(...children) {
+    registerChildren(children) {
         this._children.push(...children);
     }
     registerOperation(operation) {
@@ -29,7 +29,6 @@ class GradientHandler {
         if (!previousGradient && JSON.stringify(temp.shape) !== JSON.stringify([1])) {
             throw 'cannot call backward() when the tensor is not one dimentional';
         }
-        console.log(temp.toString());
         if (this.Operation) {
             const childGrads = this.Operation.getGradient(temp);
             for (const i in this._children) {
@@ -70,14 +69,35 @@ class Tensor {
         return "Tensor: " + JSON.stringify(this.value) + " shape: " + this.shape;
     }
 }
+class TensorFactory {
+    static filledArray(shape, fillValue = 0) {
+        if (shape.length === 0) {
+            return fillValue;
+        }
+        let array = new Array(shape[0]);
+        for (let i = 0; i < array.length; i++) {
+            array[i] = this.filledArray(shape.slice(1), fillValue);
+        }
+        return array;
+    }
+    static ones(shape) {
+        return new Tensor(this.filledArray(shape, 1));
+    }
+    static zeros(shape) {
+        return new Tensor(this.filledArray(shape, 0));
+    }
+    static filled(shape, fillValue) {
+        return new Tensor(this.filledArray(shape, fillValue));
+    }
+}
 class TensorOperation extends Function {
     constructor() {
         super('...args', 'return this._bound._call(...args)');
         this._bound = this.bind(this);
         return this._bound;
     }
-    verify(...tensors) {
-        const out = this._call(...tensors);
+    verify(tensors) {
+        const out = this._call(tensors);
         const grad = this.getGradient(out);
         if (grad.length != tensors.length) {
             throw "backward function does not return gradients of all tensors";
@@ -89,9 +109,10 @@ class TensorOperation extends Function {
         }
         console.log('Shapes verified for Class:' + this.constructor.name);
     }
-    _call(...tensors) {
-        const out = new Tensor(this.forward(...(tensors.map((t) => t.value))));
-        out.gradientHandler.registerChildren(...tensors);
+    _call(tensors, ...kwargs) {
+        this.setup(tensors, ...kwargs);
+        const out = new Tensor(this.forward((tensors.map((t) => t.value)), ...kwargs));
+        out.gradientHandler.registerChildren(tensors);
         out.gradientHandler.registerOperation(this);
         return out;
     }
@@ -107,26 +128,34 @@ class Sum extends TensorOperation {
     sum(arrays) {
         return arrays.reduce((a, b) => this.addArrays(a, b));
     }
-    forward(...tensors) {
+    forward(tensors) {
         const sum = this.sum(tensors);
         return sum;
     }
     backward(gradient) {
-        return [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]];
+        return Array(this.tensorCount).fill(gradient);
+    }
+    setup(tensors) {
+        this.tensorCount = tensors.length;
     }
 }
 class Mean extends TensorOperation {
-    forward(...tensors) {
-        const sum = tensors.flat().reduce((i, j) => i + j);
+    forward(tensors) {
+        const sum = tensors.flat().reduce((i, j) => i + j) / (this.elementCount);
         return [sum];
     }
     backward(gradient) {
-        return [[1]];
+        return [TensorFactory.filled(this.shape, gradient[0]).value];
+    }
+    setup(tensors) {
+        this.shape = tensors[0].shape;
+        this.elementCount = this.shape.reduce((x, y) => x * y);
     }
 }
+/// <reference path="TensorOperationsList.ts" />
 const [t1, t2, t3] = [new Tensor([1, 2, 3, 4]), new Tensor([1, 2, 3, 4]), new Tensor([1, 2, 3, 4])];
-let j = new Sum()(t1, t2, t3);
-j = new Mean()(j);
+let j = new Sum()([t1, t2, t3]);
+j = new Mean()([j]);
 j.backward();
-console.log(j.gradientHandler.gradient.toString());
+console.log(j.toString());
 //# sourceMappingURL=Tensors.js.map

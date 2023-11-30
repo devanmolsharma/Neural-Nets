@@ -11,8 +11,8 @@ abstract class TensorOperation extends Function {
     }
 
 
-    public verify(...tensors: Tensor[]): void {
-        const out = this._call(...tensors);
+    public verify(tensors: Tensor[]): void {
+        const out = this._call(tensors);
         const grad = this.getGradient(out);
         if (grad.length != tensors.length) {
             throw "backward function does not return gradients of all tensors";
@@ -27,14 +27,17 @@ abstract class TensorOperation extends Function {
     }
 
 
-    public abstract forward(...tensors: NumArray[]): NumArray;
+    public abstract forward(tensors: NumArray[], ...kwargs: any): NumArray;
 
 
     public abstract backward(gradient: NumArray): NumArray[];
 
-    private _call(...tensors: Tensor[]): Tensor {
-        const out = new Tensor(this.forward(...(tensors.map((t) => t.value))));
-        out.gradientHandler.registerChildren(...tensors);
+    public abstract setup(tensors: Tensor[], ...kwargs: any): void;
+
+    private _call(tensors: Tensor[], ...kwargs: any): Tensor {
+        this.setup(tensors, ...kwargs);
+        const out = new Tensor(this.forward((tensors.map((t) => t.value)), ...kwargs));
+        out.gradientHandler.registerChildren(tensors);
         out.gradientHandler.registerOperation(this);
         return out;
     }
