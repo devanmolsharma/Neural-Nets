@@ -43,7 +43,8 @@ class Mean extends TensorOperation {
     // Forward pass of the mean operation
     public forward(tensors: NumArray[]): NumArray {
         // Calculate the mean of the tensors
-        const sum = (tensors.flat().reduce((i, j) => (i as number) + (j as number)) as number) / (this.elementCount);
+        const sum = (tensors[0].flat().reduce((i, j) => (i as number) + (j as number)) as number) / (this.elementCount);
+
         return [sum];
     }
 
@@ -57,5 +58,63 @@ class Mean extends TensorOperation {
     public setup(tensors: Tensor[]): void {
         this.shape = tensors[0].shape;
         this.elementCount = this.shape.reduce((x, y) => x * y);
+    }
+}
+
+
+// Class representing the mean operation for tensors
+class Matmul extends TensorOperation {
+    // Shape of the tensors involved in the Matmul operation
+    private shape1: number[];
+    private shape2: number[];
+    private t1: number[][];
+    private t2: number[][];
+
+    static tensorMul(tensors: Array<number[][]>) {
+        // Calculate the mean of the tensors
+        let finalArr = TensorFactory.filledArray([tensors[0].length, tensors[1][0].length], 0) as number[][];
+
+        for (let row = 0; row < finalArr.length; row++) {
+            for (let col = 0; col < finalArr[0].length; col++) {
+                let sum: number = 0;
+                for (let i = 0; i < tensors[0][row].length; i++) {
+                    sum += tensors[0][row][i] * tensors[1][i][col]
+
+                }
+                finalArr[row][col] = sum;
+            }
+        }
+        return finalArr;
+    }
+
+    // Forward pass of the mean operation
+    public forward(tensors: NumArray[]): NumArray {
+
+        this.t1 = tensors[0] as number[][];
+        this.t2 = tensors[1] as number[][];
+
+        return Matmul.tensorMul([this.t1, this.t2]);
+
+
+    }
+
+    public backward(gradient: NumArray): NumArray[] {
+        let grads = [Matmul.tensorMul([gradient, TensorFactory.transpose(this.t2)]), Matmul.tensorMul([this.t1, gradient as number[][]])];
+
+        return grads;
+    }
+
+    // Do Basic checks and store rensor shapes
+    public setup(tensors: Tensor[]): void {
+        if (tensors.length != 2) {
+            throw "this Operation requires exactly two Tensors";
+        }
+
+        this.shape1 = tensors[0].shape;
+        this.shape2 = tensors[1].shape;
+
+        if (this.shape1[1] != this.shape2[0]) {
+            throw `Cannot multiply matrices with shapes ${this.shape1} and ${this.shape2}`;
+        }
     }
 }

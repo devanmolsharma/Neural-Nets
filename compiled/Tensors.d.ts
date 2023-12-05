@@ -11,7 +11,7 @@ declare class GradientHandler {
     registerOperation(operation: TensorOperation): void;
     backward(previousGradient?: Tensor): void;
 }
-type NestedArray<T> = T | NumArray[];
+type NestedArray<T> = T | Array<NestedArray<T>>;
 interface NumArray extends Array<NestedArray<number>> {
 }
 declare class Tensor {
@@ -27,6 +27,11 @@ declare class Tensor {
     toString(): string;
 }
 declare class TensorFactory {
+    static reshape(array: NumArray, shape: number[]): NumArray | number;
+    static transpose(array: any): any;
+    private static flatten;
+    private static getIndices;
+    private static setElement;
     static filledArray(shape: number[], fillValue?: number): NumArray | number;
     static ones(shape: number[]): Tensor;
     static zeros(shape: number[]): Tensor;
@@ -57,5 +62,16 @@ declare class Mean extends TensorOperation {
     backward(gradient: NumArray): NumArray[];
     setup(tensors: Tensor[]): void;
 }
-declare const t1: Tensor, t2: Tensor, t3: Tensor;
+declare class Matmul extends TensorOperation {
+    private shape1;
+    private shape2;
+    private t1;
+    private t2;
+    static tensorMul(tensors: Array<number[][]>): number[][];
+    forward(tensors: NumArray[]): NumArray;
+    backward(gradient: NumArray): NumArray[];
+    setup(tensors: Tensor[]): void;
+}
+declare const t1: Tensor, t2: Tensor;
 declare let j: any;
+declare let mean: any;

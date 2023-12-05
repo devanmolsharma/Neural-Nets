@@ -49,17 +49,19 @@ abstract class TensorOperation extends Function {
     public abstract setup(tensors: Tensor[], ...kwargs: any): void;
 
     // Private method to perform the actual call to the operation
-    private _call(tensors: Tensor[], ...kwargs: any): Tensor {
+    private _call(tensors: Tensor[], withGrad = true, ...kwargs: any): Tensor {
         // Set up the operation
         this.setup(tensors, ...kwargs);
 
         // Perform the forward pass and create a new tensor with the result
         const out = new Tensor(this.forward((tensors.map((t) => t.value)), ...kwargs));
 
-        // Register tensors as children and the operation for gradient tracking
-        out.gradientHandler.registerChildren(tensors);
-        out.gradientHandler.registerOperation(this);
+        if (withGrad) {
 
+            // Register tensors as children and the operation for gradient tracking
+            out.gradientHandler.registerChildren(tensors);
+            out.gradientHandler.registerOperation(this);
+        }
         // Return the resulting tensor
         return out;
     }

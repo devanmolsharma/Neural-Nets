@@ -1,5 +1,5 @@
 // Define a type for nested arrays, which can contain either a value of type T or nested NumArray arrays
-type NestedArray<T> = T | NumArray[];
+type NestedArray<T> = T | Array<NestedArray<T>>;
 
 // Define an interface for NumArray, which extends the Array type and allows nesting of NestedArray<number>
 interface NumArray extends Array<NestedArray<number>> { }
