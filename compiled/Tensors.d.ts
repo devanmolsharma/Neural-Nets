@@ -26,17 +26,6 @@ declare class Tensor {
     backward(gradient: Tensor): void;
     toString(): string;
 }
-declare class TensorFactory {
-    static reshape(array: NumArray, shape: number[]): NumArray | number;
-    static transpose(array: any): any;
-    private static flatten;
-    private static getIndices;
-    private static setElement;
-    static filledArray(shape: number[], fillValue?: number): NumArray | number;
-    static ones(shape: number[]): Tensor;
-    static zeros(shape: number[]): Tensor;
-    static filled(shape: number[], fillValue: number): Tensor;
-}
 declare abstract class TensorOperation extends Function {
     private _bound;
     constructor();
@@ -47,7 +36,7 @@ declare abstract class TensorOperation extends Function {
     private _call;
     getGradient(gradient: Tensor): Tensor[];
 }
-declare class Sum extends TensorOperation {
+declare class Add extends TensorOperation {
     private tensorCount;
     private addArrays;
     private sum;
@@ -63,14 +52,23 @@ declare class Mean extends TensorOperation {
     setup(tensors: Tensor[]): void;
 }
 declare class Matmul extends TensorOperation {
-    private shape1;
-    private shape2;
     private t1;
     private t2;
     static tensorMul(tensors: Array<number[][]>): number[][];
     forward(tensors: NumArray[]): NumArray;
     backward(gradient: NumArray): NumArray[];
     setup(tensors: Tensor[]): void;
+}
+declare class TensorUtils {
+    static reshape(array: NumArray, shape: number[]): NumArray | number;
+    static transpose(array: any): any;
+    private static flatten;
+    private static getIndices;
+    private static setElement;
+    static filledArray(shape: number[], fillValue?: number): NumArray | number;
+    static ones(shape: number[]): Tensor;
+    static zeros(shape: number[]): Tensor;
+    static filled(shape: number[], fillValue: number): Tensor;
 }
 declare const t1: Tensor, t2: Tensor;
 declare let j: any;

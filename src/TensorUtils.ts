@@ -1,5 +1,5 @@
 // Factory class for creating tensors with different initial values and shapes
-class TensorFactory {
+class TensorUtils {
     // Reshape a given array into the specified shape
     static reshape(array: NumArray, shape: number[]): NumArray | number {
         let result = this.filledArray(shape);
@@ -44,6 +44,7 @@ class TensorFactory {
         }
         array[indices[indices.length - 1]] = value;
     }
+
 
 
     // Create a filled array with the specified shape and fill value

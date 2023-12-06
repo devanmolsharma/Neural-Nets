@@ -1,5 +1,5 @@
 // Class representing the sum operation for tensors
-class Sum extends TensorOperation {
+class Add extends TensorOperation {
     // Number of tensors involved in the sum operation
     private tensorCount: number;
 
@@ -51,7 +51,7 @@ class Mean extends TensorOperation {
     // Backward pass of the mean operation
     public backward(gradient: NumArray): NumArray[] {
         // Distribute the gradient equally to all elements in the tensors
-        return [TensorFactory.filled(this.shape, gradient[0] as number).value];
+        return [TensorUtils.filled(this.shape, gradient[0] as number).value];
     }
 
     // Setup method to initialize shape and element count
@@ -62,17 +62,15 @@ class Mean extends TensorOperation {
 }
 
 
-// Class representing the mean operation for tensors
+// Class representing the Matrix Multipication operation for tensors
 class Matmul extends TensorOperation {
     // Shape of the tensors involved in the Matmul operation
-    private shape1: number[];
-    private shape2: number[];
     private t1: number[][];
     private t2: number[][];
 
     static tensorMul(tensors: Array<number[][]>) {
         // Calculate the mean of the tensors
-        let finalArr = TensorFactory.filledArray([tensors[0].length, tensors[1][0].length], 0) as number[][];
+        let finalArr = TensorUtils.filledArray([tensors[0].length, tensors[1][0].length], 0) as number[][];
 
         for (let row = 0; row < finalArr.length; row++) {
             for (let col = 0; col < finalArr[0].length; col++) {
@@ -99,22 +97,69 @@ class Matmul extends TensorOperation {
     }
 
     public backward(gradient: NumArray): NumArray[] {
-        let grads = [Matmul.tensorMul([gradient, TensorFactory.transpose(this.t2)]), Matmul.tensorMul([this.t1, gradient as number[][]])];
+        let grads = [Matmul.tensorMul([gradient, TensorUtils.transpose(this.t2)]), Matmul.tensorMul([this.t1, gradient as number[][]])];
 
         return grads;
     }
 
-    // Do Basic checks and store rensor shapes
+    // Do Basic checks and store tensor shapes
     public setup(tensors: Tensor[]): void {
         if (tensors.length != 2) {
             throw "this Operation requires exactly two Tensors";
         }
 
-        this.shape1 = tensors[0].shape;
-        this.shape2 = tensors[1].shape;
+        const shape1 = tensors[0].shape;
+        const shape2 = tensors[1].shape;
 
-        if (this.shape1[1] != this.shape2[0]) {
-            throw `Cannot multiply matrices with shapes ${this.shape1} and ${this.shape2}`;
+        if (shape1[1] != shape2[0]) {
+            throw `Cannot multiply matrices with shapes ${shape1} and ${shape2}`;
+        }
+    }
+}
+
+
+// Max Operation for relu activation later
+class Max extends TensorOperation {
+
+    private limit: number;
+    private tensor: NumArray;
+
+
+    static max(tensor: any, limit: number): NumArray | number {
+        if (isNaN(tensor as any)) {
+            return tensor.map((val: any) => this.max(val, limit))
+        }
+        return tensor as any as number > limit ? tensor : limit;
+    }
+
+    static calcGrad(tensor: any, gradient: any, limit: number): NumArray | number {
+        if (isNaN(tensor as any)) {
+            return tensor.map((val: any, i: number) => this.calcGrad(val, gradient[i], limit))
+        }
+        return tensor as any as number > limit ? gradient : 0;
+    }
+
+    // Forward pass
+    public forward(tensors: NumArray[]): NumArray {
+        this.limit = tensors[1][0] as number;
+        this.tensor = tensors[0];
+        return Max.max(tensors[0], tensors[1][0] as number) as NumArray;
+    }
+
+    public backward(gradient: NumArray): NumArray[] {
+        let grads = [Max.calcGrad(this.tensor, gradient, this.limit) as NumArray, [0]];
+
+        return grads;
+    }
+
+    // Do Basic checks
+    public setup(tensors: Tensor[]): void {
+        if (tensors.length != 2) {
+            throw "this Operation requires exactly two Tensors";
+        }
+
+        if (JSON.stringify(tensors[1].shape) != JSON.stringify([1])) {
+            throw "tensor2 should have shape [1]";
         }
     }
 }
