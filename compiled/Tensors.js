@@ -52,6 +52,25 @@ class GradientHandler {
         this._gradient = temp;
     }
 }
+// Class representing a layer in neural network
+class Layer {
+    get parameters() {
+        return this._parameters;
+    }
+    set parameters(value) {
+        this._parameters = value;
+    }
+    registerParameter(name, parameter) {
+        this.parameters.set(name, parameter);
+    }
+    // Planning on using this to save and load models
+    toJson() {
+        return JSON.stringify({
+            name: this.constructor.name,
+            parameters: this.parameters.forEach((tensor, key, map) => { key: tensor.value; })
+        });
+    }
+}
 // Class representing a Tensor
 class Tensor {
     // Constructor takes a NumArray as the initial value
