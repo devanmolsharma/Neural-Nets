@@ -80,4 +80,12 @@ class TensorUtils {
     static filled(shape: number[], fillValue: number): Tensor {
         return new Tensor(this.filledArray(shape, fillValue) as NumArray);
     }
+
+    static calculateShape(array: any, shape: number[] = []): number[] {
+        shape.push(array.length);
+        if (isNaN(array[0])) {
+            TensorUtils.calculateShape(array[0], shape);
+        }
+        return shape as number[];
+    }
 }

@@ -176,7 +176,7 @@ class Mean extends TensorOperation {
     // Forward pass of the mean operation
     forward(tensors) {
         // Calculate the mean of the tensors
-        const sum = tensors[0].flat().reduce((i, j) => i + j) / (this.elementCount);
+        const sum = tensors[0].flat(20).reduce((i, j) => i + j) / (this.elementCount);
         return [sum];
     }
     // Backward pass of the mean operation
@@ -190,8 +190,9 @@ class Mean extends TensorOperation {
         this.elementCount = this.shape.reduce((x, y) => x * y);
     }
 }
-// Class representing the Matrix Multipication operation for tensors
+// Class representing the Matrix Multiplication operation for tensors
 class Matmul extends TensorOperation {
+    // Static method to perform matrix multiplication of two tensors
     static tensorMul(tensors) {
         // Calculate the mean of the tensors
         let finalArr = TensorUtils.filledArray([tensors[0].length, tensors[1][0].length], 0);
@@ -206,20 +207,21 @@ class Matmul extends TensorOperation {
         }
         return finalArr;
     }
-    // Forward pass of the mean operation
+    // Forward pass of the Matmul operation
     forward(tensors) {
         this.t1 = tensors[0];
         this.t2 = tensors[1];
         return Matmul.tensorMul([this.t1, this.t2]);
     }
+    // Backward pass of the Matmul operation
     backward(gradient) {
         let grads = [Matmul.tensorMul([gradient, TensorUtils.transpose(this.t2)]), Matmul.tensorMul([this.t1, gradient])];
         return grads;
     }
-    // Do Basic checks and store tensor shapes
+    // Do basic checks and store tensor shapes
     setup(tensors) {
         if (tensors.length != 2) {
-            throw "this Operation requires exactly two Tensors";
+            throw "This operation requires exactly two tensors.";
         }
         const shape1 = tensors[0].shape;
         const shape2 = tensors[1].shape;
@@ -230,36 +232,143 @@ class Matmul extends TensorOperation {
 }
 // Max Operation for relu activation later
 class Max extends TensorOperation {
+    // Static method to find the maximum value between tensor and limit
     static max(tensor, limit) {
         if (isNaN(tensor)) {
             return tensor.map((val) => this.max(val, limit));
         }
         return tensor > limit ? tensor : limit;
     }
+    // Static method to calculate the gradient for the Max operation
     static calcGrad(tensor, gradient, limit) {
         if (isNaN(tensor)) {
             return tensor.map((val, i) => this.calcGrad(val, gradient[i], limit));
         }
         return tensor > limit ? gradient : 0;
     }
-    // Forward pass
+    // Forward pass of the Max operation
     forward(tensors) {
         this.limit = tensors[1][0];
         this.tensor = tensors[0];
         return Max.max(tensors[0], tensors[1][0]);
     }
+    // Backward pass of the Max operation
     backward(gradient) {
         let grads = [Max.calcGrad(this.tensor, gradient, this.limit), [0]];
         return grads;
     }
-    // Do Basic checks
+    // Do basic checks
     setup(tensors) {
         if (tensors.length != 2) {
-            throw "this Operation requires exactly two Tensors";
+            throw "This operation requires exactly two tensors.";
         }
         if (JSON.stringify(tensors[1].shape) != JSON.stringify([1])) {
-            throw "tensor2 should have shape [1]";
+            throw "Tensor 2 should have shape [1]";
         }
+    }
+}
+// Class representing the Min operation for tensors
+class Min extends TensorOperation {
+    // Static method to find the minimum value between tensor and limit
+    static min(tensor, limit) {
+        if (isNaN(tensor)) {
+            return tensor.map((val) => this.min(val, limit));
+        }
+        return tensor < limit ? tensor : limit;
+    }
+    // Static method to calculate the gradient for the Min operation
+    static calcGrad(tensor, gradient, limit) {
+        if (isNaN(tensor)) {
+            return tensor.map((val, i) => this.calcGrad(val, gradient[i], limit));
+        }
+        return tensor < limit ? gradient : 0;
+    }
+    // Forward pass of the Min operation
+    forward(tensors) {
+        this.limit = tensors[1][0];
+        this.tensor = tensors[0];
+        return Min.min(tensors[0], tensors[1][0]);
+    }
+    // Backward pass of the Min operation
+    backward(gradient) {
+        let grads = [Min.calcGrad(this.tensor, gradient, this.limit), [0]];
+        return grads;
+    }
+    // Do basic checks
+    setup(tensors) {
+        if (tensors.length != 2) {
+            throw "This operation requires exactly two tensors.";
+        }
+        if (JSON.stringify(tensors[1].shape) != JSON.stringify([1])) {
+            throw "Tensor 2 should have shape [1]";
+        }
+    }
+}
+// Class representing the Subtraction operation for tensors
+class Subtract extends TensorOperation {
+    // Helper function to subtract arrays element-wise
+    subtractArrays(a, b) {
+        return a.map((v, i) => Array.isArray(v) ? this.subtractArrays(v, b[i]) : v - b[i]);
+    }
+    // Function to calculate the difference of arrays
+    diff(arrays) {
+        return arrays.reduce((a, b) => this.subtractArrays(a, b));
+    }
+    // Forward pass of the Subtract operation
+    forward(tensors) {
+        // Calculate the difference of the tensors
+        const diff = this.diff(tensors);
+        return diff;
+    }
+    // Backward pass of the Subtract operation
+    backward(gradient) {
+        // Distribute the gradient to all input tensors
+        return [gradient, TensorUtils.reshape(gradient.flat(20).map((i) => -i), TensorUtils.calculateShape(gradient))];
+    }
+    // Setup method to initialize the tensor count
+    setup(tensors) {
+        if (tensors.length != 2) {
+            throw "Subtraction is only valid operation for two tensors.";
+        }
+    }
+}
+// Class representing the Multiply operation for tensors
+class Multiply extends TensorOperation {
+    // Helper function to multiply arrays element-wise
+    static multiplyArrays(a, b) {
+        return a.map((v, i) => Array.isArray(v) ? this.multiplyArrays(v, b[i]) : v * b[i]);
+    }
+    // Function to calculate the product of arrays
+    static product(arrays) {
+        return arrays.reduce((a, b) => this.multiplyArrays(a, b));
+    }
+    // Forward pass of the Multiply operation
+    forward(tensors) {
+        // Calculate the product of the tensors
+        const res = Multiply.product(tensors);
+        return res;
+    }
+    // Backward pass of the Multiply operation
+    backward(gradient) {
+        // Distribute the gradient to all input tensors
+        if (this.tensors.length == 2) {
+            return [Multiply.product([this.tensors[1], gradient]), Multiply.product([this.tensors[0], gradient])];
+        }
+        else {
+            let grads = [];
+            for (const array of this.tensors) {
+                grads.push(Multiply.product([...this.tensors.filter((v) => v != array), gradient]));
+            }
+            return grads;
+        }
+    }
+    // Setup method to initialize the tensors
+    setup(tensors) {
+        if (tensors.length < 2) {
+            throw "Multiplication is only valid for over two tensors.";
+        }
+        ;
+        this.tensors = tensors.map((e) => e.value);
     }
 }
 // Factory class for creating tensors with different initial values and shapes
@@ -330,11 +439,18 @@ class TensorUtils {
     static filled(shape, fillValue) {
         return new Tensor(this.filledArray(shape, fillValue));
     }
+    static calculateShape(array, shape = []) {
+        shape.push(array.length);
+        if (isNaN(array[0])) {
+            TensorUtils.calculateShape(array[0], shape);
+        }
+        return shape;
+    }
 }
 /// <reference path="TensorOperationsList.ts" />
-const [t1, t2] = [new Tensor([[1, 2, 3], [1, 0, 0], [1, 0, 0]]), new Tensor([[1, -2], [3, -4], [-3, 4]])];
-// let j = new Matmul()([t1, t2])
+const [t1, t2, t3] = [new Tensor([[1, 2, 3], [1, 0, 0], [1, 0, 0]]), new Tensor([[1, 2, 3], [1, 7, 0], [1, 9, 0]]), new Tensor([[1, 2, 3], [1, 7, 0], [1, 9, 0]])];
+let j = new Multiply()([t1, t2, t3]);
 // j = new Max()([j,new Tensor([0])])
-let mean = new Mean()([new Max()([t2, new Tensor([0])])]);
+let mean = new Mean()([j]);
 mean.backward();
-console.log(t2.gradientHandler.gradient);
+console.log(t1.gradientHandler.gradient);
