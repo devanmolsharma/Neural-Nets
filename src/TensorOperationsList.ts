@@ -51,7 +51,7 @@ class Mean extends TensorOperation {
     // Backward pass of the mean operation
     public backward(gradient: NumArray): NumArray[] {
         // Distribute the gradient equally to all elements in the tensors
-        return [TensorUtils.filled(this.shape, gradient[0] as number).value];
+        return [TensorUtils.filledArray(this.shape, gradient[0] as number) as NumArray];
     }
 
     // Setup method to initialize shape and element count
@@ -121,7 +121,7 @@ class Matmul extends TensorOperation {
 
     // Backward pass of the Matmul operation
     public backward(gradient: NumArray): NumArray[] {
-        let grads = [Matmul.tensorMul([gradient, TensorUtils.transpose(this.t2)]), Matmul.tensorMul([this.t1, gradient as number[][]])];
+        let grads = [Matmul.tensorMul([gradient, TensorUtils.transpose(this.t2)]), Matmul.tensorMul([TensorUtils.transpose(this.t1), gradient as number[][]])];
         return grads;
     }
 

@@ -232,7 +232,7 @@ class Mean extends TensorOperation {
     // Backward pass of the mean operation
     backward(gradient) {
         // Distribute the gradient equally to all elements in the tensors
-        return [TensorUtils.filled(this.shape, gradient[0]).value];
+        return [TensorUtils.filledArray(this.shape, gradient[0])];
     }
     // Setup method to initialize shape and element count
     setup(tensors) {
@@ -282,7 +282,7 @@ class Matmul extends TensorOperation {
     }
     // Backward pass of the Matmul operation
     backward(gradient) {
-        let grads = [Matmul.tensorMul([gradient, TensorUtils.transpose(this.t2)]), Matmul.tensorMul([this.t1, gradient])];
+        let grads = [Matmul.tensorMul([gradient, TensorUtils.transpose(this.t2)]), Matmul.tensorMul([TensorUtils.transpose(this.t1), gradient])];
         return grads;
     }
     // Do basic checks and store tensor shapes
@@ -517,4 +517,7 @@ class TensorUtils {
 /// <reference path="TensorOperationsList.ts" />
 /// <reference path="Linear.ts" />
 let l = new Linear(3, 10);
-console.log(l.toJson());
+let mean = new Mean()([l.forward(new Tensor([[1, 2, 3]]))]);
+let loss = new Subtract()([mean, new Tensor([2])]);
+loss.backward();
+console.log(l.parameters.get('weights').gradientHandler.gradient);
