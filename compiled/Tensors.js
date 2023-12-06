@@ -54,6 +54,10 @@ class GradientHandler {
 }
 // Class representing a layer in neural network
 class Layer {
+    constructor() {
+        // Parameters of the Layer
+        this._parameters = new Map();
+    }
     get parameters() {
         return this._parameters;
     }
@@ -61,14 +65,41 @@ class Layer {
         this._parameters = value;
     }
     registerParameter(name, parameter) {
-        this.parameters.set(name, parameter);
+        this._parameters.set(name, parameter);
     }
     // Planning on using this to save and load models
     toJson() {
+        let j = [];
+        this.parameters.forEach((e, k) => j.push({ name: k, value: e.value }));
         return JSON.stringify({
-            name: this.constructor.name,
-            parameters: this.parameters.forEach((tensor, key, map) => { key: tensor.value; })
+            'name': this.constructor.name, parameters: j,
         });
+    }
+    static fromJson(json) {
+        let params = JSON.parse(json);
+    }
+}
+/// <reference path="Layer.ts" />
+// a simple impelentation of Linear Layer
+class Linear extends Layer {
+    constructor(num_inputs, num_out, activation = null) {
+        super();
+        this.activation = activation;
+        this.weights = TensorUtils.filled([num_out, num_inputs], -1);
+        this.biases = TensorUtils.filled([1, num_out], 0);
+        this.registerParameter('weights', this.weights);
+        this.registerParameter('biases', this.biases);
+        this.transposer = new Transpose();
+        this.adder = new Add();
+        this.matMul = new Matmul();
+    }
+    forward(input) {
+        let x = this.matMul([input, this.transposer([this.weights])]);
+        x = this.adder([x, this.biases]);
+        if (this.activation == 'relu') {
+            x = new Max()([x, new Tensor([0])]);
+        }
+        return x;
     }
 }
 // Class representing a Tensor
@@ -207,6 +238,23 @@ class Mean extends TensorOperation {
     setup(tensors) {
         this.shape = tensors[0].shape;
         this.elementCount = this.shape.reduce((x, y) => x * y);
+    }
+}
+class Transpose extends TensorOperation {
+    // Forward pass of the Transpose operation
+    forward(tensors) {
+        // Calculate the Transpose of the tensors
+        const transpose = TensorUtils.transpose(tensors[0]);
+        return transpose;
+    }
+    // Backward pass of the Transpose operation
+    backward(gradient) {
+        // Distribute the gradient equally to all elements in the tensors
+        const transpose = TensorUtils.transpose(gradient);
+        return [transpose];
+    }
+    // Setup method to initialize shape and element count
+    setup(tensors) {
     }
 }
 // Class representing the Matrix Multiplication operation for tensors
@@ -467,9 +515,6 @@ class TensorUtils {
     }
 }
 /// <reference path="TensorOperationsList.ts" />
-const [t1, t2, t3] = [new Tensor([[1, 2, 3], [1, 0, 0], [1, 0, 0]]), new Tensor([[1, 2, 3], [1, 7, 0], [1, 9, 0]]), new Tensor([[1, 2, 3], [1, 7, 0], [1, 9, 0]])];
-let j = new Multiply()([t1, t2, t3]);
-// j = new Max()([j,new Tensor([0])])
-let mean = new Mean()([j]);
-mean.backward();
-console.log(t1.gradientHandler.gradient);
+/// <reference path="Linear.ts" />
+let l = new Linear(3, 10);
+console.log(l.toJson());

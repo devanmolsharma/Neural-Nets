@@ -61,6 +61,34 @@ class Mean extends TensorOperation {
     }
 }
 
+class Transpose extends TensorOperation {
+    // Shape of the tensors involved in the mean operation
+    private shape: number[];
+
+    // Total number of elements in the tensors
+    private elementCount: number;
+
+    // Forward pass of the Transpose operation
+    public forward(tensors: NumArray[]): NumArray {
+        // Calculate the Transpose of the tensors
+        const transpose = TensorUtils.transpose(tensors[0]);
+
+        return transpose;
+    }
+
+    // Backward pass of the Transpose operation
+    public backward(gradient: NumArray): NumArray[] {
+        // Distribute the gradient equally to all elements in the tensors
+        const transpose = TensorUtils.transpose(gradient);
+
+        return [transpose];
+    }
+
+    // Setup method to initialize shape and element count
+    public setup(tensors: Tensor[]): void {
+    }
+}
+
 // Class representing the Matrix Multiplication operation for tensors
 class Matmul extends TensorOperation {
     // Shape of the tensors involved in the Matmul operation
