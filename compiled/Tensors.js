@@ -52,6 +52,59 @@ class GradientHandler {
         this._gradient = temp;
     }
 }
+// Abstract class representing a tensor operation
+class TensorOperation extends Function {
+    // Constructor sets up the bound instance for chaining
+    constructor() {
+        // Call the super constructor to set up the function
+        super('...args', 'return this._bound._call(...args)');
+        // Bind the instance to enable chaining
+        this._bound = this.bind(this);
+        // Return the bound instance
+        return this._bound;
+    }
+    // Verify shapes of tensors after the operation
+    verify(tensors) {
+        // Call the _call method to perform the operation
+        const out = this._call(tensors);
+        // Get the gradients from the operation
+        const grad = this.getGradient(out);
+        // Check if the backward function returns gradients for all tensors
+        if (grad.length != tensors.length) {
+            throw "backward function does not return gradients of all tensors";
+        }
+        // Check if the shapes of gradients match the shapes of corresponding tensors
+        for (const i in tensors) {
+            if (JSON.stringify(tensors[i].shape) != JSON.stringify(grad[i].shape)) {
+                throw `gradient shape mismatch on element at index ${i}.\n required shape: ${tensors[i].shape} but got shape ${grad[i].shape}`;
+            }
+        }
+        // Log verification success
+        console.log('Shapes verified for Class:' + this.constructor.name);
+    }
+    // Private method to perform the actual call to the operation
+    _call(tensors, ...kwargs) {
+        var _a;
+        // Set up the operation
+        this.setup(tensors, ...kwargs);
+        // Perform the forward pass and create a new tensor with the result
+        const out = new Tensor(this.forward((tensors.map((t) => t.value)), ...kwargs));
+        if ((_a = kwargs.withGrad) !== null && _a !== void 0 ? _a : true) {
+            // Register tensors as children and the operation for gradient tracking
+            out.gradientHandler.registerChildren(tensors);
+            out.gradientHandler.registerOperation(this);
+        }
+        // Return the resulting tensor
+        return out;
+    }
+    // Get the gradient as tensors from a gradient tensor
+    getGradient(gradient) {
+        // Perform the backward pass and create new tensors for the gradients
+        const grads = this.backward(gradient.value);
+        return grads.map((e) => new Tensor(e));
+    }
+}
+/// <reference path="TensorOperation.ts" />
 // Class representing a layer in neural network
 class Layer {
     constructor() {
@@ -67,16 +120,49 @@ class Layer {
     registerParameter(name, parameter) {
         this._parameters.set(name, parameter);
     }
+    isPrimitive(val) {
+        if (val === Object(val)) {
+            return false;
+        }
+        else {
+            return true;
+        }
+    }
     // Planning on using this to save and load models
     toJson() {
         let j = [];
-        this.parameters.forEach((e, k) => j.push({ name: k, value: e.value }));
-        return JSON.stringify({
-            'name': this.constructor.name, parameters: j,
+        (Object.getOwnPropertyNames(this)).forEach((name) => {
+            const value = this[name];
+            let tempValue;
+            if (value instanceof Tensor) {
+                tempValue = value.value;
+            }
+            else if (!this.isPrimitive(value)) {
+                return;
+            }
+            else {
+                tempValue = value;
+            }
+            j.push({
+                'name': name,
+                'value': tempValue
+            });
         });
+        return JSON.stringify(j);
     }
-    static fromJson(json) {
+    loadData(json) {
         let params = JSON.parse(json);
+        params.forEach((data) => {
+            if (data.value instanceof Array) {
+                this[data.name] = new Tensor(data.value);
+                this._parameters[data.name] = this[data.name];
+            }
+            else {
+                this[data.name] = data.value;
+                this._parameters[data.name] = this[data.name];
+            }
+        });
+        return this;
     }
 }
 /// <reference path="Layer.ts" />
@@ -85,7 +171,7 @@ class Linear extends Layer {
     constructor(num_inputs, num_out, activation = null) {
         super();
         this.activation = activation;
-        this.weights = TensorUtils.filled([num_out, num_inputs], -1);
+        this.weights = TensorUtils.filled([num_out, num_inputs], 0);
         this.biases = TensorUtils.filled([1, num_out], 0);
         this.registerParameter('weights', this.weights);
         this.registerParameter('biases', this.biases);
@@ -141,58 +227,6 @@ class Tensor {
     // Method to convert the tensor to a string representation
     toString() {
         return "Tensor: " + JSON.stringify(this.value) + " shape: " + this.shape;
-    }
-}
-// Abstract class representing a tensor operation
-class TensorOperation extends Function {
-    // Constructor sets up the bound instance for chaining
-    constructor() {
-        // Call the super constructor to set up the function
-        super('...args', 'return this._bound._call(...args)');
-        // Bind the instance to enable chaining
-        this._bound = this.bind(this);
-        // Return the bound instance
-        return this._bound;
-    }
-    // Verify shapes of tensors after the operation
-    verify(tensors) {
-        // Call the _call method to perform the operation
-        const out = this._call(tensors);
-        // Get the gradients from the operation
-        const grad = this.getGradient(out);
-        // Check if the backward function returns gradients for all tensors
-        if (grad.length != tensors.length) {
-            throw "backward function does not return gradients of all tensors";
-        }
-        // Check if the shapes of gradients match the shapes of corresponding tensors
-        for (const i in tensors) {
-            if (JSON.stringify(tensors[i].shape) != JSON.stringify(grad[i].shape)) {
-                throw `gradient shape mismatch on element at index ${i}.\n required shape: ${tensors[i].shape} but got shape ${grad[i].shape}`;
-            }
-        }
-        // Log verification success
-        console.log('Shapes verified for Class:' + this.constructor.name);
-    }
-    // Private method to perform the actual call to the operation
-    _call(tensors, ...kwargs) {
-        var _a;
-        // Set up the operation
-        this.setup(tensors, ...kwargs);
-        // Perform the forward pass and create a new tensor with the result
-        const out = new Tensor(this.forward((tensors.map((t) => t.value)), ...kwargs));
-        if ((_a = kwargs.withGrad) !== null && _a !== void 0 ? _a : true) {
-            // Register tensors as children and the operation for gradient tracking
-            out.gradientHandler.registerChildren(tensors);
-            out.gradientHandler.registerOperation(this);
-        }
-        // Return the resulting tensor
-        return out;
-    }
-    // Get the gradient as tensors from a gradient tensor
-    getGradient(gradient) {
-        // Perform the backward pass and create new tensors for the gradients
-        const grads = this.backward(gradient.value);
-        return grads.map((e) => new Tensor(e));
     }
 }
 // Class representing the sum operation for tensors
@@ -516,8 +550,10 @@ class TensorUtils {
 }
 /// <reference path="TensorOperationsList.ts" />
 /// <reference path="Linear.ts" />
-let l = new Linear(3, 10);
+let l = new Linear(3, 10, 'relu');
+let l2 = new Linear(30, 10);
 let mean = new Mean()([l.forward(new Tensor([[1, 2, 3]]))]);
 let loss = new Subtract()([mean, new Tensor([2])]);
 loss.backward();
-console.log(l.parameters.get('weights').gradientHandler.gradient);
+const json = l.toJson();
+console.log(l2.loadData(json));
