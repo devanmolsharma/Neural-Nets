@@ -148,10 +148,10 @@ class Layer {
                 'value': tempValue
             });
         });
-        return JSON.stringify(j);
+        return JSON.stringify({ layer: this.constructor.name, data: j });
     }
     loadData(json) {
-        let params = JSON.parse(json);
+        let params = json.data;
         params.forEach((data) => {
             if (data.value instanceof Array) {
                 this[data.name] = new Tensor(data.value);
@@ -168,10 +168,10 @@ class Layer {
 /// <reference path="Layer.ts" />
 // a simple impelentation of Linear Layer
 class Linear extends Layer {
-    constructor(num_inputs, num_out, activation = null) {
+    constructor(num_inputs = 1, num_out = 1, activation = null) {
         super();
         this.activation = activation;
-        this.weights = TensorUtils.filled([num_out, num_inputs], 0);
+        this.weights = TensorUtils.filled([num_out, num_inputs], 1);
         this.biases = TensorUtils.filled([1, num_out], 0);
         this.registerParameter('weights', this.weights);
         this.registerParameter('biases', this.biases);
@@ -186,6 +186,139 @@ class Linear extends Layer {
             x = new Max()([x, new Tensor([0])]);
         }
         return x;
+    }
+}
+class Model extends Function {
+    constructor() {
+        // Call the super constructor to set up the function
+        super('...args', 'return this._bound._call(...args)');
+        // Bind the instance to enable chaining
+        this._bound = this.bind(this);
+        // Return the bound instance
+        return this._bound;
+    }
+    _call(...params) {
+        return this.forward(params);
+    }
+    isPrimitive(val) {
+        if (val === Object(val)) {
+            return false;
+        }
+        else {
+            return true;
+        }
+    }
+    toJson() {
+        let j = [];
+        (Object.getOwnPropertyNames(this)).forEach((name) => {
+            const value = this[name];
+            let tempValue;
+            if (value instanceof Tensor) {
+                tempValue = value.value;
+            }
+            else if (value instanceof Array && value[0] && value[0] instanceof Tensor) {
+                tempValue = { array: value.map((e) => e.value) };
+            }
+            else if (value instanceof Layer) {
+                tempValue = value.toJson();
+            }
+            else if (value instanceof Array && value[0] && value[0] instanceof Layer) {
+                tempValue = { array: value.map((e) => e.toJson()) };
+            }
+            else if (!this.isPrimitive(value)) {
+                return;
+            }
+            else {
+                tempValue = value;
+            }
+            j.push({
+                name: name,
+                value: tempValue
+            });
+        });
+        return JSON.stringify(j);
+    }
+    loadData(json) {
+        let params = JSON.parse(json);
+        params.forEach((data) => {
+            if (data.name === 'length')
+                return;
+            if (data.name === 'name')
+                return;
+            if (data.value instanceof Array && this.isPrimitive(data.value.flat[0])) {
+                this[data.name] = new Tensor(data.value);
+            }
+            else if (data.value.layer) {
+                const obj = eval(`new ${data.value.layer}()`);
+                obj.loadData(data.value)(this)[data.name] = obj;
+            }
+            else if (data.value.array) {
+                let temp = [];
+                data.value.array.forEach((e) => {
+                    if (!(e.value instanceof Array)) {
+                        const jsn = JSON.parse(e);
+                        const obj = eval(`new ${jsn.layer}()`);
+                        obj.loadData(jsn);
+                        temp.push(obj);
+                    }
+                    else {
+                        const tensor = new Tensor(e);
+                        temp.push(tensor);
+                    }
+                });
+                this[data.name] = temp;
+            }
+            else {
+                this[data.name] = data.value;
+            }
+        });
+        return this;
+    }
+}
+class Optimiser {
+    constructor(_tensors, { ...kwargs }) {
+        this._tensors = _tensors;
+        this.stepNum = 0;
+        this.extraArgs = kwargs;
+    }
+    ;
+    get tensors() {
+        return this._tensors;
+    }
+    step() {
+        this.tensors.forEach((tensor) => {
+            const processedGradient = this.processGradient(tensor.gradientHandler.gradient, this.stepNum, this.extraArgs);
+            tensor.gradientHandler.gradient = processedGradient;
+        });
+        this.stepNum++;
+    }
+    zero_grad() {
+        this.tensors.forEach((tensor) => {
+            tensor.gradientHandler = new GradientHandler(tensor);
+        });
+    }
+}
+/// <reference path="Model.ts" />
+class Sequential extends Model {
+    constructor() {
+        super(...arguments);
+        this._layers = [];
+    }
+    get layers() {
+        return this._layers;
+    }
+    add(value) {
+        this._layers.push(value);
+    }
+    forward(params) {
+        let res;
+        this._layers.forEach((layer, i) => {
+            if (i == 0)
+                res = layer.forward(params[0]);
+            else
+                res = layer.forward(res);
+        });
+        return res;
     }
 }
 // Class representing a Tensor
@@ -213,12 +346,12 @@ class Tensor {
         return new Tensor(this.value);
     }
     // Private method to recursively calculate the shape of the tensor
-    _calculateShape(array, shape = []) {
-        shape.push(array.length);
-        if (isNaN(array[0])) {
-            this._calculateShape(array[0], shape);
+    _calculateShape(array, shapeArr = []) {
+        shapeArr.push(array.length);
+        if (Array.isArray(array[0])) {
+            this._calculateShape(array[0], shapeArr);
         }
-        return shape;
+        return shapeArr;
     }
     // Method for performing backpropagation
     backward(gradient) {
@@ -550,10 +683,10 @@ class TensorUtils {
 }
 /// <reference path="TensorOperationsList.ts" />
 /// <reference path="Linear.ts" />
-let l = new Linear(3, 10, 'relu');
-let l2 = new Linear(30, 10);
-let mean = new Mean()([l.forward(new Tensor([[1, 2, 3]]))]);
-let loss = new Subtract()([mean, new Tensor([2])]);
-loss.backward();
-const json = l.toJson();
-console.log(l2.loadData(json));
+/// <reference path="Sequential.ts" />
+let s = new Sequential();
+let s2 = new Sequential();
+s.add(new Linear(1, 4));
+s.add(new Linear(4, 1));
+s.add(new Linear(1, 1));
+console.log(s(new Tensor([[2]])));

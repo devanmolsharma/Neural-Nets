@@ -1,10 +1,10 @@
 /// <reference path="TensorOperationsList.ts" />
 /// <reference path="Linear.ts" />
+/// <reference path="Sequential.ts" />
 
-let l = new Linear(3, 10,'relu');
-let l2 = new Linear(30, 10);
-let mean  = new Mean()([l.forward(new Tensor([[1,2,3]]))]);
-let loss = new Subtract()([mean, new Tensor([2])])
-loss.backward();
-const json = l.toJson();
-console.log(l2.loadData(json));
+let s = new Sequential();
+let s2 = new Sequential();
+s.add(new Linear(1,4))
+s.add(new Linear(4,1))
+s.add(new Linear(1,1))
+console.log(s(new Tensor([[2]])));

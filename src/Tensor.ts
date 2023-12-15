@@ -34,12 +34,12 @@ class Tensor {
     }
 
     // Private method to recursively calculate the shape of the tensor
-    private _calculateShape(array: any, shape: number[] = []): number[] {
-        shape.push(array.length);
-        if (isNaN(array[0])) {
-            this._calculateShape(array[0], shape);
+    private _calculateShape(array: any, shapeArr: number[] = []): number[] {
+        shapeArr.push(array.length);
+        if (Array.isArray(array[0])) {
+            this._calculateShape(array[0], shapeArr);
         }
-        return shape as number[];
+        return shapeArr as number[];
     }
 
     // Method for performing backpropagation

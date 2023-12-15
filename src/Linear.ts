@@ -7,9 +7,9 @@ class Linear extends Layer {
     private transposer: Transpose;
     private adder: Add;
     private matMul: Matmul;
-    constructor(num_inputs: number, num_out: number, private activation: "relu" | null = null) {
+    constructor(num_inputs: number = 1, num_out: number = 1, private activation: "relu" | null = null) {
         super();
-        this.weights = TensorUtils.filled([num_out, num_inputs], 0);
+        this.weights = TensorUtils.filled([num_out, num_inputs], 1);
         this.biases = TensorUtils.filled([1, num_out], 0);
         this.registerParameter('weights', this.weights);
         this.registerParameter('biases', this.biases);
@@ -25,7 +25,7 @@ class Linear extends Layer {
         if (this.activation == 'relu') {
             x = new Max()([x, new Tensor([0])])
         }
-        
+
         return x;
     }
 }

@@ -50,11 +50,11 @@ abstract class Layer {
                 'value': tempValue
             })
         });
-        return JSON.stringify(j);
+        return JSON.stringify({layer:this.constructor.name,data:j});
     }
 
-    public loadData(json: string) {
-        let params = JSON.parse(json);
+    public loadData(json: any) {
+        let params = json.data;
         params.forEach((data: any) => {
             if (data.value instanceof Array) {
                 (this as any)[data.name] = new Tensor(data.value);
