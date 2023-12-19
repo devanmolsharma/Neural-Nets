@@ -67,4 +67,9 @@ class GradientHandler {
         // Set the gradient tensor for this handler
         this._gradient = temp;
     }
+
+
+    applyGradient(){
+        this._tensor.value =  Subtract.diff([this._tensor.value , this.gradient.value]);
+    }
 }

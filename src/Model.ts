@@ -101,5 +101,6 @@ abstract class Model extends Function {
 
     abstract forward(params: any[]): Tensor;
 
+    abstract getParameters(): Map<String, Tensor>[];
 
 }

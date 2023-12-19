@@ -235,19 +235,19 @@ class Min extends TensorOperation {
 // Class representing the Subtraction operation for tensors
 class Subtract extends TensorOperation {
     // Helper function to subtract arrays element-wise
-    private subtractArrays(a: any, b: any) {
-        return a.map((v: any, i: any) => Array.isArray(v) ? this.subtractArrays(v, b[i]) : v - b[i]);
+    public static subtract2DArrays(a: any, b: any) {
+        return a.map((v: any, i: any) => Array.isArray(v) ? this.subtract2DArrays(v, b[i]) : v - b[i]);
     }
 
     // Function to calculate the difference of arrays
-    private diff(arrays: any) {
-        return arrays.reduce((a: any, b: any) => this.subtractArrays(a, b));
+    public static diff(arrays: any) {
+        return arrays.reduce((a: any, b: any) => Subtract.subtract2DArrays(a, b));
     }
 
     // Forward pass of the Subtract operation
     public forward(tensors: NumArray[]): NumArray {
         // Calculate the difference of the tensors
-        const diff = this.diff(tensors);
+        const diff = Subtract.diff(tensors);
         return diff;
     }
 

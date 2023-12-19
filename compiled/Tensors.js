@@ -51,6 +51,9 @@ class GradientHandler {
         // Set the gradient tensor for this handler
         this._gradient = temp;
     }
+    applyGradient() {
+        this._tensor.value = Subtract.diff([this._tensor.value, this.gradient.value]);
+    }
 }
 // Abstract class representing a tensor operation
 class TensorOperation extends Function {
@@ -276,26 +279,29 @@ class Model extends Function {
     }
 }
 class Optimiser {
-    constructor(_tensors, { ...kwargs }) {
-        this._tensors = _tensors;
+    constructor(_parameters, { ...kwargs }) {
+        this._parameters = _parameters;
         this.stepNum = 0;
         this.extraArgs = kwargs;
     }
     ;
-    get tensors() {
-        return this._tensors;
+    get parameters() {
+        return this._parameters;
     }
     step() {
-        this.tensors.forEach((tensor) => {
-            const processedGradient = this.processGradient(tensor.gradientHandler.gradient, this.stepNum, this.extraArgs);
-            tensor.gradientHandler.gradient = processedGradient;
+        this._parameters.forEach((params) => {
+            params.forEach((tensor) => {
+                const processedGradient = this.processGradient(tensor.gradientHandler.gradient, this.stepNum, this.extraArgs);
+                tensor.gradientHandler.gradient = processedGradient;
+                tensor.gradientHandler.applyGradient();
+            });
         });
         this.stepNum++;
     }
-    zero_grad() {
-        this.tensors.forEach((tensor) => {
-            tensor.gradientHandler = new GradientHandler(tensor);
-        });
+}
+class SGD extends Optimiser {
+    processGradient(gradient, step, kwargs) {
+        return new Tensor(Multiply.product([gradient.value, TensorUtils.filledArray(gradient.shape, kwargs.lr)]));
     }
 }
 /// <reference path="Model.ts" />
@@ -319,6 +325,9 @@ class Sequential extends Model {
                 res = layer.forward(res);
         });
         return res;
+    }
+    getParameters() {
+        return this.layers.map((layer) => layer.parameters);
     }
 }
 // Class representing a Tensor
@@ -541,17 +550,17 @@ class Min extends TensorOperation {
 // Class representing the Subtraction operation for tensors
 class Subtract extends TensorOperation {
     // Helper function to subtract arrays element-wise
-    subtractArrays(a, b) {
-        return a.map((v, i) => Array.isArray(v) ? this.subtractArrays(v, b[i]) : v - b[i]);
+    static subtract2DArrays(a, b) {
+        return a.map((v, i) => Array.isArray(v) ? this.subtract2DArrays(v, b[i]) : v - b[i]);
     }
     // Function to calculate the difference of arrays
-    diff(arrays) {
-        return arrays.reduce((a, b) => this.subtractArrays(a, b));
+    static diff(arrays) {
+        return arrays.reduce((a, b) => Subtract.subtract2DArrays(a, b));
     }
     // Forward pass of the Subtract operation
     forward(tensors) {
         // Calculate the difference of the tensors
-        const diff = this.diff(tensors);
+        const diff = Subtract.diff(tensors);
         return diff;
     }
     // Backward pass of the Subtract operation
@@ -684,9 +693,19 @@ class TensorUtils {
 /// <reference path="TensorOperationsList.ts" />
 /// <reference path="Linear.ts" />
 /// <reference path="Sequential.ts" />
+/// <reference path="SGD.ts" />
 let s = new Sequential();
-let s2 = new Sequential();
-s.add(new Linear(1, 4));
-s.add(new Linear(4, 1));
-s.add(new Linear(1, 1));
-console.log(s(new Tensor([[2]])));
+s.add(new Linear(1, 4, 'relu'));
+s.add(new Linear(4, 1, 'relu'));
+s.add(new Linear(1, 1, 'relu'));
+const optimiser = new SGD(s.getParameters(), { lr: 1e-4 });
+for (let i = 0; i < 1000; i++) {
+    const out = s.forward([new Tensor([[2]])]);
+    const expected = new Tensor([[4]]);
+    let loss = new Subtract()([out, expected]);
+    loss = new Mean()([loss]);
+    loss.backward();
+    optimiser.step();
+    console.log(loss.value);
+}
+console.log(s.toJson());
