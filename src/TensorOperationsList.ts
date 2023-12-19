@@ -1,3 +1,4 @@
+/// <reference path="TensorOperation.ts" />
 // Class representing the sum operation for tensors
 class Add extends TensorOperation {
     // Number of tensors involved in the sum operation

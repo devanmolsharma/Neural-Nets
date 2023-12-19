@@ -83,7 +83,7 @@ class TensorUtils {
 
     static calculateShape(array: any, shape: number[] = []): number[] {
         shape.push(array.length);
-        if (isNaN(array[0])) {
+        if (Array.isArray(array[0])) {
             TensorUtils.calculateShape(array[0], shape);
         }
         return shape as number[];

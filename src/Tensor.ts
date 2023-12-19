@@ -1,9 +1,12 @@
+
+
 // Define a type for nested arrays, which can contain either a value of type T or nested NumArray arrays
 type NestedArray<T> = T | Array<NestedArray<T>>;
 
 // Define an interface for NumArray, which extends the Array type and allows nesting of NestedArray<number>
 interface NumArray extends Array<NestedArray<number>> { }
 
+/// <reference path="GradinetHandler.ts" />
 // Class representing a Tensor
 class Tensor {
     // Gradient handler for backpropagation
@@ -20,6 +23,7 @@ class Tensor {
 
     // Setter for the value
     public set value(value: NumArray) {
+        if (JSON.stringify(TensorUtils.calculateShape(value)) != JSON.stringify(this.shape)) throw `shapes dont match , setting ${JSON.stringify(value)} to tensor ${JSON.stringify(this.value)} , shapes ${(TensorUtils.calculateShape(value))} , ${JSON.stringify(this.shape)} `;
         this._value = value;
     }
 
@@ -29,7 +33,7 @@ class Tensor {
     }
 
     // Method to create a clone of the tensor
-    public clone(){
+    public clone() {
         return new Tensor(this.value)
     }
 

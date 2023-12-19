@@ -24,12 +24,12 @@ abstract class Optimiser {
         this.stepNum++;
     }
 
-    // zero_grad() {
-    //     this._parameters.forEach((params: Map<String, Tensor>) => {
-    //         params.forEach((tensor) => {
-    //             tensor.gradientHandler.reset();
-    //         })
+    zero_grad() {
+        this._parameters.forEach((params: Map<String, Tensor>) => {
+            params.forEach((tensor) => {
+                tensor.gradientHandler = new GradientHandler(tensor);
+            })
 
-    //     });
-    // }
+        });
+    }
 }
