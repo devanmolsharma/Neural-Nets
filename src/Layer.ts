@@ -50,7 +50,7 @@ abstract class Layer {
                 'value': tempValue
             })
         });
-        return JSON.stringify({layer:this.constructor.name,data:j});
+        return JSON.stringify({ layer: this.constructor.name, data: j });
     }
 
     public loadData(json: any) {
@@ -60,7 +60,7 @@ abstract class Layer {
                 (this as any)[data.name] = new Tensor(data.value);
                 (this._parameters as any)[data.name] = (this as any)[data.name];
 
-            } else {
+            } else if (data.name) {
                 (this as any)[data.name] = data.value;
                 (this._parameters as any)[data.name] = (this as any)[data.name];
             }

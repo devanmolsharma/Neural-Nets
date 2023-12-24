@@ -22,6 +22,10 @@ class TensorUtils {
         return result;
     }
 
+    static argmax(arr: number[]) {
+        return (arr).findIndex((v) => v == Math.max(...arr))
+    }
+
     // Helper method to flatten an array
     private static flatten(array: any): any[] {
         return array.reduce((acc: any, val: any) => Array.isArray(val) ? acc.concat(this.flatten(val)) : acc.concat(val), []);
@@ -65,6 +69,23 @@ class TensorUtils {
         return array;
     }
 
+    static randArray(shape: number[], min = 0, max = 1): NumArray | number {
+        // If the shape is empty, return the fill value
+        if (shape.length === 0) {
+            return (Math.random() * (max - min)) + min;
+        }
+
+        // Create a new array with the specified shape
+        let array = new Array(shape[0]);
+
+        // Recursively fill the array with nested arrays
+        for (let i = 0; i < array.length; i++) {
+            array[i] = this.randArray(shape.slice(1), min, max);
+        }
+
+        return array;
+    }
+
 
     // Create a tensor with all elements set to 1 and the specified shape
     static ones(shape: number[]): Tensor {
@@ -79,6 +100,11 @@ class TensorUtils {
     // Create a tensor with all elements set to the specified fill value and shape
     static filled(shape: number[], fillValue: number): Tensor {
         return new Tensor(this.filledArray(shape, fillValue) as NumArray);
+    }
+
+    // Create a tensor with all elements set to the specified fill value and shape
+    static rand(shape: number[], min: number, max: number): Tensor {
+        return new Tensor(this.randArray(shape, min, max) as NumArray);
     }
 
     static calculateShape(array: any, shape: number[] = []): number[] {

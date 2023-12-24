@@ -141,52 +141,6 @@ class Matmul extends TensorOperation {
     }
 }
 
-// Max Operation for relu activation later
-class Max extends TensorOperation {
-    private limit: number;
-    private tensor: NumArray;
-
-    // Static method to find the maximum value between tensor and limit
-    static max(tensor: any, limit: number): NumArray | number {
-        if (isNaN(tensor as any)) {
-            return tensor.map((val: any) => this.max(val, limit));
-        }
-        return tensor as any as number > limit ? tensor : limit;
-    }
-
-    // Static method to calculate the gradient for the Max operation
-    static calcGrad(tensor: any, gradient: any, limit: number): NumArray | number {
-        if (isNaN(tensor as any)) {
-            return tensor.map((val: any, i: number) => this.calcGrad(val, gradient[i], limit));
-        }
-        return tensor as any as number > limit ? gradient : 0;
-    }
-
-    // Forward pass of the Max operation
-    public forward(tensors: NumArray[]): NumArray {
-        this.limit = tensors[1][0] as number;
-        this.tensor = tensors[0];
-        return Max.max(tensors[0], tensors[1][0] as number) as NumArray;
-    }
-
-    // Backward pass of the Max operation
-    public backward(gradient: NumArray): NumArray[] {
-        let grads = [Max.calcGrad(this.tensor, gradient, this.limit) as NumArray, [0]];
-        return grads;
-    }
-
-    // Do basic checks
-    public setup(tensors: Tensor[]): void {
-        if (tensors.length != 2) {
-            throw "This operation requires exactly two tensors.";
-        }
-
-        if (JSON.stringify(tensors[1].shape) != JSON.stringify([1])) {
-            throw "Tensor 2 should have shape [1]";
-        }
-    }
-}
-
 // Class representing the Min operation for tensors
 class Min extends TensorOperation {
     private limit: number;
@@ -194,18 +148,16 @@ class Min extends TensorOperation {
 
     // Static method to find the minimum value between tensor and limit
     static min(tensor: any, limit: number): NumArray | number {
-        if (isNaN(tensor as any)) {
+        if (Array.isArray(tensor as any)) {
             return tensor.map((val: any) => this.min(val, limit));
         }
         return tensor as any as number < limit ? tensor : limit;
     }
-
-    // Static method to calculate the gradient for the Min operation
     static calcGrad(tensor: any, gradient: any, limit: number): NumArray | number {
-        if (isNaN(tensor as any)) {
+        if (Array.isArray(tensor as any)) {
             return tensor.map((val: any, i: number) => this.calcGrad(val, gradient[i], limit));
         }
-        return tensor as any as number < limit ? gradient : 0;
+        return tensor as any as number < limit ? gradient : limit;
     }
 
     // Forward pass of the Min operation
@@ -233,6 +185,284 @@ class Min extends TensorOperation {
     }
 }
 
+// Max Operation for relu activation later
+class Max extends TensorOperation {
+    private _limit: number;
+    public get limit(): number {
+        return this._limit;
+    }
+    public set limit(value: number) {
+        this._limit = value;
+    }
+    private tensor: NumArray;
+
+    // Static method to find the maximum value between tensor and limit
+    static max(tensor: any, limit: number): NumArray | number {
+        if (Array.isArray(tensor as any)) {
+            return tensor.map((val: any) => this.max(val, limit));
+        }
+        return tensor as any as number > limit ? tensor : limit;
+    }
+
+    // Static method to calculate the gradient for the Max operation
+    static calcGrad(tensor: any, gradient: any, limit: number): NumArray | number {
+        if (Array.isArray(tensor as any)) {
+            return tensor.map((val: any, i: number) => this.calcGrad(val, gradient[i], limit));
+        }
+        return tensor as any as number > limit ? gradient : 0;
+    }
+
+    // Forward pass of the Max operation
+    public forward(tensors: NumArray[]): NumArray {
+        this.tensor = tensors[0];
+        return Max.max(tensors[0], this.limit) as NumArray;
+    }
+
+    // Backward pass of the Max operation
+    public backward(gradient: NumArray): NumArray[] {
+        let grads = [Max.calcGrad(this.tensor, gradient, this.limit) as NumArray, [0]];
+        return grads;
+    }
+
+    // Do basic checks
+    public setup(tensors: Tensor[]): void {
+        this.limit = tensors[1] ? tensors[1].value[0] as number : 0;
+        if (tensors[1] && (JSON.stringify(tensors[1].shape) != JSON.stringify([1]))) {
+            throw "Tensor 2 should have shape [1]";
+        }
+    }
+}
+
+// Max Operation for relu activation later
+class Normalize extends TensorOperation {
+    private max: number;
+    mean: number;
+    variance: any;
+    stdDev: number;
+
+    // Static method to find the maximum value between tensor and limit
+    static norm(tensor: any, max: number, mean: number, variance: number, stdiv: number): NumArray | number {
+        if (Array.isArray(tensor as any)) {
+            return tensor.map((val: any) => this.norm(val, max, mean, variance, stdiv));
+        }
+        return (tensor as any as number - mean) / stdiv;
+    }
+
+
+    // Forward pass of the Max operation
+    public forward(tensors: NumArray[]): NumArray {
+        const flatt0 = tensors[0].flat(20);
+        this.max = Math.max(flatt0.reduce((x, y) => (x > y) ? x : y) as number, 1);
+        this.mean = flatt0.reduce((x: number, y: number) => x + y) as number / flatt0.length;
+        this.variance = flatt0.reduce((sum: number, val: number) => sum + Math.pow(val - this.mean, 2), 0) as number / flatt0.length;
+        this.stdDev = Math.sqrt(this.variance);
+
+        return Normalize.norm(tensors[0], this.max, this.mean, this.variance, this.stdDev) as NumArray;
+    }
+
+    // Static method to calculate the gradient for the Max operation
+    static calcGrad(gradient: any, max: number, mean: number, variance: number, stdiv: number): NumArray | number {
+        if (Array.isArray(gradient as any)) {
+            return gradient.map((val: any, i: number) => this.calcGrad(val, max, mean, variance, stdiv));
+        }
+        return (gradient as any as number / stdiv);
+    }
+
+    // Backward pass of the Max operation
+    public backward(gradient: NumArray): NumArray[] {
+        let grads = [Normalize.calcGrad(gradient, this.max, this.mean, this.variance, this.stdDev) as NumArray];
+        return grads;
+    }
+
+    // Do basic checks
+    public setup(tensors: Tensor[]): void {
+    }
+}
+
+class Rescale extends TensorOperation {
+    private max: number;
+
+    // Static method to find the maximum value between tensor and limit
+    static rescale(tensor: any, max: number): NumArray | number {
+        if (Array.isArray(tensor as any)) {
+            return tensor.map((val: any) => this.rescale(val, max));
+        }
+        return (tensor as any as number) / max;
+    }
+
+
+    // Forward pass of the Max operation
+    public forward(tensors: NumArray[]): NumArray {
+        const flatt0 = tensors[0].flat(20);
+        this.max = Math.max(flatt0.reduce((x, y) => (x > y) ? x : y) as number, 1);
+
+        return Rescale.rescale(tensors[0], this.max) as NumArray;
+    }
+
+    // Static method to calculate the gradient for the Max operation
+    static calcGrad(gradient: any, max: number): NumArray | number {
+        if (Array.isArray(gradient as any)) {
+            return gradient.map((val: any, i: number) => this.calcGrad(val, max));
+        }
+        
+        return (gradient as any as number / max);
+    }
+
+    // Backward pass of the Max operation
+    public backward(gradient: NumArray): NumArray[] {
+        let grads = [Rescale.calcGrad(gradient, this.max) as NumArray];
+        return grads;
+    }
+
+    // Do basic checks
+    public setup(tensors: Tensor[]): void {
+    }
+}
+
+class NanToNum extends TensorOperation {
+    private limit: number;
+    private tensor: NumArray;
+
+    // Static method to find the maximum value between tensor and limit
+    static unNanify(tensor: any): NumArray | number {
+        if (Array.isArray(tensor as any)) {
+            return tensor.map((val: any) => this.unNanify(val));
+        }
+        if (isNaN(tensor) || tensor == null) return 0;
+        return tensor;
+    }
+
+    // Forward pass of the Max operation
+    public forward(tensors: NumArray[]): NumArray {
+        this.tensor = tensors[0];
+        return NanToNum.unNanify(tensors[0]) as NumArray;
+    }
+
+    // Backward pass of the Max operation
+    public backward(gradient: NumArray): NumArray[] {
+        let grads = [NanToNum.calcGrad(this.tensor, gradient) as NumArray, [0]];
+        return grads;
+    }
+
+    static calcGrad(tensor: any, gradient: any): NumArray | number {
+        if (Array.isArray(tensor as any)) {
+            return tensor.map((val: any, i: number) => this.calcGrad(val, gradient[i]));
+        }
+        if (isNaN(tensor)) return 0;
+        return 1;
+    }
+
+    // Do basic checks
+    public setup(tensors: Tensor[]): void {
+    }
+}
+
+// Class representing the Min operation for tensors
+class Sigmoid extends TensorOperation {
+    private result: NumArray;
+    private shape: number[];
+
+    // Static method to find the minimum value between tensor and limit
+    static sig(tensor: any): NumArray | number {
+        if (Array.isArray(tensor as any)) {
+            return tensor.map((val: any) => this.sig(val));
+        }
+        return 1 / (1 + Math.exp(-(tensor as any as number)));
+    }
+
+    // Forward pass of the Min operation
+    public forward(tensors: NumArray[]): NumArray {
+        this.result = Sigmoid.sig(tensors[0]) as NumArray;
+        return structuredClone(this.result);
+    }
+
+    // Backward pass of the Min operation
+    public backward(gradient: NumArray): NumArray[] {
+        const res = [Multiply.product([
+            gradient,
+            Multiply.product([
+                structuredClone(this.result), Subtract.diff([TensorUtils.filledArray(this.shape, 1), structuredClone(this.result)]
+                )
+            ])
+        ])
+        ];
+        return res;
+
+    }
+
+    // Do basic checks
+    public setup(tensors: Tensor[]): void {
+        this.shape = tensors[0].shape;
+    }
+}
+
+class Softmax extends TensorOperation {
+    private result: NumArray;
+    private shape: number[];
+    private sum: number;
+
+    // Static method to find the minimum value between tensor and limit
+    static softmax(tensor: any, sum: number): NumArray | number {
+        if (Array.isArray(tensor as any)) {
+            return tensor.map((val: any) => this.softmax(val, sum));
+        }
+
+        return Math.exp(tensor as any as number) / sum;
+    }
+
+    // Forward pass of the Min operation
+    public forward(tensors: NumArray[]): NumArray {
+        this.sum = tensors[0].flat(20).reduce((prev, curr) => {
+            return (prev as number) + Math.exp((curr as number))
+        }) as number;
+
+
+        this.result = Softmax.softmax(tensors[0], this.sum) as NumArray;
+        return structuredClone(this.result);
+    }
+
+    // Backward pass of the Min operation
+    public backward(gradient: NumArray): NumArray[] {
+
+        let grad = TensorUtils.filledArray([this.shape[1], this.shape[1]], 0) as number[][];
+
+        for (let x = 0; x < this.shape[1]; x++) {
+            for (let y = 0; y < this.shape[1]; y++) {
+                if (x == y) {
+                    const val = this.result.flat(20)[x] as number
+                    grad[x][y] = val * (1 - val);
+                } else {
+                    const val1 = this.result.flat(20)[x] as number
+                    const val2 = this.result.flat(20)[y] as number
+                    grad[x][y] = -1 * val1 * val2;
+                }
+            }
+
+        }
+
+        return [Matmul.tensorMul([gradient as number[][], grad])];
+
+    }
+
+    // Do basic checks
+    public setup(tensors: Tensor[]): void {
+
+        this.shape = tensors[0].shape;
+
+        tensors[0] = new Rescale()([tensors[0]]);
+    }
+}
+
+class ReLU extends Max {
+
+}
+
+class LeakyReLU extends Max {
+    public setup(tensors: Tensor[]): void {
+        super.limit = -0.01;
+    }
+}
+
 // Class representing the Subtraction operation for tensors
 class Subtract extends TensorOperation {
     // Helper function to subtract arrays element-wise
@@ -256,6 +486,44 @@ class Subtract extends TensorOperation {
     public backward(gradient: NumArray): NumArray[] {
         // Distribute the gradient to all input tensors
         return [gradient, TensorUtils.reshape((gradient.flat(20) as number[]).map((i) => -i) as NumArray, TensorUtils.calculateShape(gradient) as number[]) as NumArray];
+    }
+
+    // Setup method to initialize the tensor count
+    public setup(tensors: Tensor[]): void {
+        if (tensors.length != 2) {
+            throw "Subtraction is only valid operation for two tensors.";
+        }
+    }
+}
+
+class CrossEntropy extends TensorOperation {
+    private tensors: NumArray[];
+    // Helper function to subtract arrays element-wise
+    public static crossEntropy2DArrays(a: any, b: any) {
+        return a.map((v: any, i: any) => Array.isArray(v) ? this.crossEntropy2DArrays(v, b[i]) : (-Math.log(1 + 1e-8 - (v - b[i]) ** 2)));
+    }
+
+
+    public static crossEntropyBack(a: any, b: any) {
+        return a.map((v: any, i: any) => Array.isArray(v) ? this.crossEntropyBack(v, b[i]) : ((2 * (v - b[i])) / (1 + 1e-8 - ((v - b[i]) ** 2))));
+    }
+
+    // Function to calculate the difference of arrays
+    public static ce(arrays: any) {
+        return arrays.reduce((a: any, b: any) => CrossEntropy.crossEntropy2DArrays(a, b));
+    }
+
+    // Forward pass of the Subtract operation
+    public forward(tensors: NumArray[]): NumArray {
+        // Calculate the difference of the tensors
+        this.tensors = tensors;
+        return CrossEntropy.ce(tensors);
+    }
+
+    // Backward pass of the Subtract operation
+    public backward(gradient: NumArray): NumArray[] {
+        // Distribute the gradient to all input tensors
+        return [CrossEntropy.crossEntropyBack(this.tensors[0], this.tensors[1]), gradient];
     }
 
     // Setup method to initialize the tensor count

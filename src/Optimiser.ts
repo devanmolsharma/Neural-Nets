@@ -15,9 +15,11 @@ abstract class Optimiser {
     step(): void {
         this._parameters.forEach((params: Map<String, Tensor>) => {
             params.forEach((tensor) => {
-                const processedGradient = this.processGradient(tensor.gradientHandler.gradient, this.stepNum, this.extraArgs);
-                tensor.gradientHandler.gradient = processedGradient;
-                tensor.gradientHandler.applyGradient();
+                if (tensor instanceof Tensor) {
+                    const processedGradient = this.processGradient(tensor.gradientHandler.gradient, this.stepNum, this.extraArgs);
+                    tensor.gradientHandler.gradient = processedGradient;
+                    tensor.gradientHandler.applyGradient();
+                }
             })
 
         })
@@ -27,9 +29,11 @@ abstract class Optimiser {
     zero_grad() {
         this._parameters.forEach((params: Map<String, Tensor>) => {
             params.forEach((tensor) => {
-                tensor.gradientHandler = new GradientHandler(tensor);
+                if (tensor instanceof Tensor)
+                    tensor.gradientHandler = new GradientHandler(tensor);
             })
 
         });
     }
+
 }

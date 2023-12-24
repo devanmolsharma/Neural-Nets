@@ -1,3 +1,47 @@
+class Optimiser {
+    constructor(_parameters, { ...kwargs }) {
+        this._parameters = _parameters;
+        this.stepNum = 0;
+        this.extraArgs = kwargs;
+    }
+    ;
+    get parameters() {
+        return this._parameters;
+    }
+    step() {
+        this._parameters.forEach((params) => {
+            params.forEach((tensor) => {
+                if (tensor instanceof Tensor) {
+                    const processedGradient = this.processGradient(tensor.gradientHandler.gradient, this.stepNum, this.extraArgs);
+                    tensor.gradientHandler.gradient = processedGradient;
+                    tensor.gradientHandler.applyGradient();
+                }
+            });
+        });
+        this.stepNum++;
+    }
+    zero_grad() {
+        this._parameters.forEach((params) => {
+            params.forEach((tensor) => {
+                if (tensor instanceof Tensor)
+                    tensor.gradientHandler = new GradientHandler(tensor);
+            });
+        });
+    }
+}
+/// <reference path="Optimiser.ts" />
+class Adam extends Optimiser {
+    constructor(_parameters, { ...kwargs }) {
+        super(_parameters, kwargs);
+    }
+    ;
+    processGradient(gradient, step, kwargs) {
+        throw "Not Implemented Yet";
+    }
+    step() {
+        super.step();
+    }
+}
 // Class for managing gradients during backpropagation
 class GradientHandler {
     // Constructor takes a tensor to associate with this handler
@@ -160,7 +204,7 @@ class Layer {
                 this[data.name] = new Tensor(data.value);
                 this._parameters[data.name] = this[data.name];
             }
-            else {
+            else if (data.name) {
                 this[data.name] = data.value;
                 this._parameters[data.name] = this[data.name];
             }
@@ -171,24 +215,53 @@ class Layer {
 /// <reference path="Layer.ts" />
 // a simple impelentation of Linear Layer
 class Linear extends Layer {
-    constructor(num_inputs = 1, num_out = 1, activation = null) {
+    constructor(num_inputs = 1, num_out = 1, activation = null, useBias = true) {
         super();
         this.activation = activation;
-        this.weights = TensorUtils.filled([num_out, num_inputs], 1e-3);
-        this.biases = TensorUtils.filled([1, num_out], 0);
+        this.useBias = useBias;
+        this.weights = TensorUtils.rand([num_out, num_inputs], -1e-3, 1e-3);
+        if (useBias)
+            this.biases = TensorUtils.rand([1, num_out], -1e-3, 1e-3);
         this.registerParameter('weights', this.weights);
         this.registerParameter('biases', this.biases);
         this.transposer = new Transpose();
         this.adder = new Add();
         this.matMul = new Matmul();
     }
+    setupActivations() {
+        if (this.activation && !this.activationFn)
+            this.activationFn = eval(`new ${this.activation}`);
+    }
     forward(input) {
+        this.setupActivations();
         let x = this.matMul([input, this.transposer([this.weights])]);
-        x = this.adder([x, this.biases]);
-        if (this.activation == 'relu') {
-            x = new Max()([x, new Tensor([0])]);
-        }
+        if (this.useBias)
+            x = this.adder([x, this.biases]);
+        if (this.activation)
+            x = this.activationFn([x]);
         return x;
+    }
+}
+class Metric {
+}
+class Accuracy extends Metric {
+    constructor(afterIterations = 100) {
+        super();
+        this.afterIterations = afterIterations;
+        this.corrects = 0;
+    }
+    forward(actual, pred, loop) {
+        const accuracy = this.corrects / 100;
+        this.reset(loop);
+        if (TensorUtils.argmax(actual.value.flat(20)) == TensorUtils.argmax(pred.value.flat(20))) {
+            this.corrects++;
+        }
+        return accuracy;
+    }
+    reset(loop) {
+        if (loop % this.afterIterations == 0) {
+            this.corrects = 0;
+        }
     }
 }
 class Model extends Function {
@@ -278,37 +351,23 @@ class Model extends Function {
         return this;
     }
 }
-class Optimiser {
+class SGD extends Optimiser {
     constructor(_parameters, { ...kwargs }) {
-        this._parameters = _parameters;
-        this.stepNum = 0;
-        this.extraArgs = kwargs;
+        var _a, _b;
+        super(_parameters, kwargs);
+        this.lr = (_a = kwargs.lr) !== null && _a !== void 0 ? _a : 1e-4;
+        this.minLr = kwargs.lr * 1e-2;
+        this.decay = (_b = kwargs.decay) !== null && _b !== void 0 ? _b : 1e-2;
     }
     ;
-    get parameters() {
-        return this._parameters;
+    processGradient(gradient, step, kwargs) {
+        const unNaned = NanToNum.unNanify(gradient.value);
+        const product = Multiply.product([unNaned, TensorUtils.filledArray(gradient.shape, kwargs.lr)]);
+        return new Tensor(product);
     }
     step() {
-        this._parameters.forEach((params) => {
-            params.forEach((tensor) => {
-                const processedGradient = this.processGradient(tensor.gradientHandler.gradient, this.stepNum, this.extraArgs);
-                tensor.gradientHandler.gradient = processedGradient;
-                tensor.gradientHandler.applyGradient();
-            });
-        });
-        this.stepNum++;
-    }
-    zero_grad() {
-        this._parameters.forEach((params) => {
-            params.forEach((tensor) => {
-                tensor.gradientHandler = new GradientHandler(tensor);
-            });
-        });
-    }
-}
-class SGD extends Optimiser {
-    processGradient(gradient, step, kwargs) {
-        return new Tensor(Multiply.product([gradient.value, TensorUtils.filledArray(gradient.shape, kwargs.lr)]));
+        super.step();
+        this.lr = Math.max(this.minLr, this.lr - this.lr * this.decay);
     }
 }
 /// <reference path="Model.ts" />
@@ -484,58 +543,20 @@ class Matmul extends TensorOperation {
         }
     }
 }
-// Max Operation for relu activation later
-class Max extends TensorOperation {
-    // Static method to find the maximum value between tensor and limit
-    static max(tensor, limit) {
-        if (isNaN(tensor)) {
-            return tensor.map((val) => this.max(val, limit));
-        }
-        return tensor > limit ? tensor : limit;
-    }
-    // Static method to calculate the gradient for the Max operation
-    static calcGrad(tensor, gradient, limit) {
-        if (isNaN(tensor)) {
-            return tensor.map((val, i) => this.calcGrad(val, gradient[i], limit));
-        }
-        return tensor > limit ? gradient : 0;
-    }
-    // Forward pass of the Max operation
-    forward(tensors) {
-        this.limit = tensors[1][0];
-        this.tensor = tensors[0];
-        return Max.max(tensors[0], tensors[1][0]);
-    }
-    // Backward pass of the Max operation
-    backward(gradient) {
-        let grads = [Max.calcGrad(this.tensor, gradient, this.limit), [0]];
-        return grads;
-    }
-    // Do basic checks
-    setup(tensors) {
-        if (tensors.length != 2) {
-            throw "This operation requires exactly two tensors.";
-        }
-        if (JSON.stringify(tensors[1].shape) != JSON.stringify([1])) {
-            throw "Tensor 2 should have shape [1]";
-        }
-    }
-}
 // Class representing the Min operation for tensors
 class Min extends TensorOperation {
     // Static method to find the minimum value between tensor and limit
     static min(tensor, limit) {
-        if (isNaN(tensor)) {
+        if (Array.isArray(tensor)) {
             return tensor.map((val) => this.min(val, limit));
         }
         return tensor < limit ? tensor : limit;
     }
-    // Static method to calculate the gradient for the Min operation
     static calcGrad(tensor, gradient, limit) {
-        if (isNaN(tensor)) {
+        if (Array.isArray(tensor)) {
             return tensor.map((val, i) => this.calcGrad(val, gradient[i], limit));
         }
-        return tensor < limit ? gradient : 0;
+        return tensor < limit ? gradient : limit;
     }
     // Forward pass of the Min operation
     forward(tensors) {
@@ -558,6 +579,219 @@ class Min extends TensorOperation {
         }
     }
 }
+// Max Operation for relu activation later
+class Max extends TensorOperation {
+    get limit() {
+        return this._limit;
+    }
+    set limit(value) {
+        this._limit = value;
+    }
+    // Static method to find the maximum value between tensor and limit
+    static max(tensor, limit) {
+        if (Array.isArray(tensor)) {
+            return tensor.map((val) => this.max(val, limit));
+        }
+        return tensor > limit ? tensor : limit;
+    }
+    // Static method to calculate the gradient for the Max operation
+    static calcGrad(tensor, gradient, limit) {
+        if (Array.isArray(tensor)) {
+            return tensor.map((val, i) => this.calcGrad(val, gradient[i], limit));
+        }
+        return tensor > limit ? gradient : 0;
+    }
+    // Forward pass of the Max operation
+    forward(tensors) {
+        this.tensor = tensors[0];
+        return Max.max(tensors[0], this.limit);
+    }
+    // Backward pass of the Max operation
+    backward(gradient) {
+        let grads = [Max.calcGrad(this.tensor, gradient, this.limit), [0]];
+        return grads;
+    }
+    // Do basic checks
+    setup(tensors) {
+        this.limit = tensors[1] ? tensors[1].value[0] : 0;
+        if (tensors[1] && (JSON.stringify(tensors[1].shape) != JSON.stringify([1]))) {
+            throw "Tensor 2 should have shape [1]";
+        }
+    }
+}
+// Max Operation for relu activation later
+class Normalize extends TensorOperation {
+    // Static method to find the maximum value between tensor and limit
+    static norm(tensor, max, mean, variance, stdiv) {
+        if (Array.isArray(tensor)) {
+            return tensor.map((val) => this.norm(val, max, mean, variance, stdiv));
+        }
+        return (tensor - mean) / stdiv;
+    }
+    // Forward pass of the Max operation
+    forward(tensors) {
+        const flatt0 = tensors[0].flat(20);
+        this.max = Math.max(flatt0.reduce((x, y) => (x > y) ? x : y), 1);
+        this.mean = flatt0.reduce((x, y) => x + y) / flatt0.length;
+        this.variance = flatt0.reduce((sum, val) => sum + Math.pow(val - this.mean, 2), 0) / flatt0.length;
+        this.stdDev = Math.sqrt(this.variance);
+        return Normalize.norm(tensors[0], this.max, this.mean, this.variance, this.stdDev);
+    }
+    // Static method to calculate the gradient for the Max operation
+    static calcGrad(gradient, max, mean, variance, stdiv) {
+        if (Array.isArray(gradient)) {
+            return gradient.map((val, i) => this.calcGrad(val, max, mean, variance, stdiv));
+        }
+        return (gradient / stdiv);
+    }
+    // Backward pass of the Max operation
+    backward(gradient) {
+        let grads = [Normalize.calcGrad(gradient, this.max, this.mean, this.variance, this.stdDev)];
+        return grads;
+    }
+    // Do basic checks
+    setup(tensors) {
+    }
+}
+class Rescale extends TensorOperation {
+    // Static method to find the maximum value between tensor and limit
+    static rescale(tensor, max) {
+        if (Array.isArray(tensor)) {
+            return tensor.map((val) => this.rescale(val, max));
+        }
+        return tensor / max;
+    }
+    // Forward pass of the Max operation
+    forward(tensors) {
+        const flatt0 = tensors[0].flat(20);
+        this.max = Math.max(flatt0.reduce((x, y) => (x > y) ? x : y), 1);
+        return Rescale.rescale(tensors[0], this.max);
+    }
+    // Static method to calculate the gradient for the Max operation
+    static calcGrad(gradient, max) {
+        if (Array.isArray(gradient)) {
+            return gradient.map((val, i) => this.calcGrad(val, max));
+        }
+        return (gradient / max);
+    }
+    // Backward pass of the Max operation
+    backward(gradient) {
+        let grads = [Rescale.calcGrad(gradient, this.max)];
+        return grads;
+    }
+    // Do basic checks
+    setup(tensors) {
+    }
+}
+class NanToNum extends TensorOperation {
+    // Static method to find the maximum value between tensor and limit
+    static unNanify(tensor) {
+        if (Array.isArray(tensor)) {
+            return tensor.map((val) => this.unNanify(val));
+        }
+        if (isNaN(tensor) || tensor == null)
+            return 0;
+        return tensor;
+    }
+    // Forward pass of the Max operation
+    forward(tensors) {
+        this.tensor = tensors[0];
+        return NanToNum.unNanify(tensors[0]);
+    }
+    // Backward pass of the Max operation
+    backward(gradient) {
+        let grads = [NanToNum.calcGrad(this.tensor, gradient), [0]];
+        return grads;
+    }
+    static calcGrad(tensor, gradient) {
+        if (Array.isArray(tensor)) {
+            return tensor.map((val, i) => this.calcGrad(val, gradient[i]));
+        }
+        if (isNaN(tensor))
+            return 0;
+        return 1;
+    }
+    // Do basic checks
+    setup(tensors) {
+    }
+}
+// Class representing the Min operation for tensors
+class Sigmoid extends TensorOperation {
+    // Static method to find the minimum value between tensor and limit
+    static sig(tensor) {
+        if (Array.isArray(tensor)) {
+            return tensor.map((val) => this.sig(val));
+        }
+        return 1 / (1 + Math.exp(-tensor));
+    }
+    // Forward pass of the Min operation
+    forward(tensors) {
+        this.result = Sigmoid.sig(tensors[0]);
+        return structuredClone(this.result);
+    }
+    // Backward pass of the Min operation
+    backward(gradient) {
+        const res = [Multiply.product([
+                gradient,
+                Multiply.product([
+                    structuredClone(this.result), Subtract.diff([TensorUtils.filledArray(this.shape, 1), structuredClone(this.result)])
+                ])
+            ])
+        ];
+        return res;
+    }
+    // Do basic checks
+    setup(tensors) {
+        this.shape = tensors[0].shape;
+    }
+}
+class Softmax extends TensorOperation {
+    // Static method to find the minimum value between tensor and limit
+    static softmax(tensor, sum) {
+        if (Array.isArray(tensor)) {
+            return tensor.map((val) => this.softmax(val, sum));
+        }
+        return Math.exp(tensor) / sum;
+    }
+    // Forward pass of the Min operation
+    forward(tensors) {
+        this.sum = tensors[0].flat(20).reduce((prev, curr) => {
+            return prev + Math.exp(curr);
+        });
+        this.result = Softmax.softmax(tensors[0], this.sum);
+        return structuredClone(this.result);
+    }
+    // Backward pass of the Min operation
+    backward(gradient) {
+        let grad = TensorUtils.filledArray([this.shape[1], this.shape[1]], 0);
+        for (let x = 0; x < this.shape[1]; x++) {
+            for (let y = 0; y < this.shape[1]; y++) {
+                if (x == y) {
+                    const val = this.result.flat(20)[x];
+                    grad[x][y] = val * (1 - val);
+                }
+                else {
+                    const val1 = this.result.flat(20)[x];
+                    const val2 = this.result.flat(20)[y];
+                    grad[x][y] = -1 * val1 * val2;
+                }
+            }
+        }
+        return [Matmul.tensorMul([gradient, grad])];
+    }
+    // Do basic checks
+    setup(tensors) {
+        this.shape = tensors[0].shape;
+        tensors[0] = new Rescale()([tensors[0]]);
+    }
+}
+class ReLU extends Max {
+}
+class LeakyReLU extends Max {
+    setup(tensors) {
+        super.limit = -0.01;
+    }
+}
 // Class representing the Subtraction operation for tensors
 class Subtract extends TensorOperation {
     // Helper function to subtract arrays element-wise
@@ -578,6 +812,36 @@ class Subtract extends TensorOperation {
     backward(gradient) {
         // Distribute the gradient to all input tensors
         return [gradient, TensorUtils.reshape(gradient.flat(20).map((i) => -i), TensorUtils.calculateShape(gradient))];
+    }
+    // Setup method to initialize the tensor count
+    setup(tensors) {
+        if (tensors.length != 2) {
+            throw "Subtraction is only valid operation for two tensors.";
+        }
+    }
+}
+class CrossEntropy extends TensorOperation {
+    // Helper function to subtract arrays element-wise
+    static crossEntropy2DArrays(a, b) {
+        return a.map((v, i) => Array.isArray(v) ? this.crossEntropy2DArrays(v, b[i]) : (-Math.log(1 + 1e-8 - (v - b[i]) ** 2)));
+    }
+    static crossEntropyBack(a, b) {
+        return a.map((v, i) => Array.isArray(v) ? this.crossEntropyBack(v, b[i]) : ((2 * (v - b[i])) / (1 + 1e-8 - ((v - b[i]) ** 2))));
+    }
+    // Function to calculate the difference of arrays
+    static ce(arrays) {
+        return arrays.reduce((a, b) => CrossEntropy.crossEntropy2DArrays(a, b));
+    }
+    // Forward pass of the Subtract operation
+    forward(tensors) {
+        // Calculate the difference of the tensors
+        this.tensors = tensors;
+        return CrossEntropy.ce(tensors);
+    }
+    // Backward pass of the Subtract operation
+    backward(gradient) {
+        // Distribute the gradient to all input tensors
+        return [CrossEntropy.crossEntropyBack(this.tensors[0], this.tensors[1]), gradient];
     }
     // Setup method to initialize the tensor count
     setup(tensors) {
@@ -647,6 +911,9 @@ class TensorUtils {
         }
         return result;
     }
+    static argmax(arr) {
+        return (arr).findIndex((v) => v == Math.max(...arr));
+    }
     // Helper method to flatten an array
     static flatten(array) {
         return array.reduce((acc, val) => Array.isArray(val) ? acc.concat(this.flatten(val)) : acc.concat(val), []);
@@ -681,6 +948,19 @@ class TensorUtils {
         }
         return array;
     }
+    static randArray(shape, min = 0, max = 1) {
+        // If the shape is empty, return the fill value
+        if (shape.length === 0) {
+            return (Math.random() * (max - min)) + min;
+        }
+        // Create a new array with the specified shape
+        let array = new Array(shape[0]);
+        // Recursively fill the array with nested arrays
+        for (let i = 0; i < array.length; i++) {
+            array[i] = this.randArray(shape.slice(1), min, max);
+        }
+        return array;
+    }
     // Create a tensor with all elements set to 1 and the specified shape
     static ones(shape) {
         return new Tensor(this.filledArray(shape, 1));
@@ -693,6 +973,10 @@ class TensorUtils {
     static filled(shape, fillValue) {
         return new Tensor(this.filledArray(shape, fillValue));
     }
+    // Create a tensor with all elements set to the specified fill value and shape
+    static rand(shape, min, max) {
+        return new Tensor(this.randArray(shape, min, max));
+    }
     static calculateShape(array, shape = []) {
         shape.push(array.length);
         if (Array.isArray(array[0])) {
@@ -701,57 +985,146 @@ class TensorUtils {
         return shape;
     }
 }
-/// <reference path="TensorOperationsList.ts" />
-/// <reference path="Tensor.ts" />
-/// <reference path="Linear.ts" />
-/// <reference path="Sequential.ts" />
-/// <reference path="SGD.ts" />
-async function train(data) {
-    const net = new Sequential();
-    net.add(new Linear(784, 80, 'relu'));
-    net.add(new Linear(80, 50, 'relu'));
-    net.add(new Linear(50, 1));
-    const optimiser = new SGD(net.getParameters(), { lr: 1e-4 });
-    data.forEach((subData, i) => {
-        setTimeout(((subData, i) => {
-            return () => {
-                const inp = new Tensor([[...subData.slice(1)]]);
-                const out = net.forward([inp]);
-                const expected = new Tensor([[subData[0] * 255]]);
-                let loss = new Subtract()([out, expected]);
-                loss = new Multiply()([loss, loss]);
-                loss = new Mean()([loss]);
-                loss.backward();
-                optimiser.step();
-                optimiser.zero_grad();
-                if (loss.value == Infinity) {
-                    throw 'Infinity Seen';
-                }
-                if (i % 500 == 0) {
-                    console.log(loss.value, expected.value[0], out.value[0]);
-                    var dataUri = "data:application/json;charset=utf-8;base64," + btoa(net.toJson());
-                    document.getElementById('model').href = dataUri;
-                }
-            };
-        })(subData, i), 0);
-        // throw ' ';
-    });
+class Trainer {
+    constructor(net, optimiser, loss, metric = null) {
+        this.net = net;
+        this.optimiser = optimiser;
+        this.loss = loss;
+        this.metric = metric;
+    }
+    onTrainingDone(net) { }
+    onLoopDone(loss, expected, out, loopNo, metric) { }
+    loop(x, y, loopNo) {
+        let out = this.net.forward([new Tensor(x)]);
+        const expected = new Tensor(y);
+        let loss = this.loss([out, expected]);
+        loss = new Mean()([loss]);
+        loss.backward();
+        this.optimiser.step();
+        this.optimiser.zero_grad();
+        if (loss.value == Infinity) {
+            throw 'Infinity Seen';
+        }
+        this.onLoopDone(loss, expected, out, loopNo, this.calculateMetric(expected, out, loopNo));
+    }
+    calculateMetric(expected, out, loopNo) {
+        return this.metric.forward(expected, out, loopNo);
+    }
+    train(x, y, oneHotEncode = false) {
+        for (let i = 0; i < x.length; i++) {
+            const inp = x[i];
+            let exp = y[i];
+            if (oneHotEncode) {
+                let oneHot = new Array(10).fill(0);
+                oneHot[exp] = 0.8;
+                exp = [oneHot];
+            }
+            this.loop(inp, exp, i);
+        }
+        this.onTrainingDone(this.net);
+    }
 }
-// let s = new Sequential();
-// s.add(new Linear(1, 4,'relu'))
-// s.add(new Linear(4, 1,'relu'))
-// s.add(new Linear(1, 1,'relu'))
-// const optimiser = new SGD(s.getParameters(), {lr:1e-4});
-// for (let i = 0; i < 1000; i++) {
-//     const out = s.forward([new Tensor([[2]])])
-//     const expected = new Tensor([[4]]);
-//     let loss = new Subtract()([out, expected]);
-//     loss = new Mean()([loss])
-//     loss.backward();
-//     optimiser.step();
-//     console.log(loss.value);
-// }
-// console.log(s.toJson());
+let draw = false;
+let arr = TensorUtils.filledArray([28, 28], 0);
+let model = createNeuralNetwork();
+function argmax(arr) {
+    return (arr).findIndex((v) => v == Math.max(...arr));
+}
+async function loadData() {
+    model.loadData(await (await fetch('http://localhost/model.php')).text());
+}
+document.addEventListener('DOMContentLoaded', () => {
+    let table = document.getElementById('drawBase');
+    if (table) {
+        for (let i = 0; i < 28; i++) {
+            let tr = document.createElement('tr');
+            for (let j = 0; j < 28; j++) {
+                tr.innerHTML += `<td class="pixel ${i}-${j}"></td>`;
+            }
+            table.appendChild(tr);
+        }
+        const pixels = document.getElementsByClassName('pixel');
+        for (const pixel of pixels) {
+            pixel.addEventListener('pointermove', (e) => {
+                if (draw) {
+                    if (!e.target.classList.contains('black')) {
+                        const [x, y] = e.target.classList[1].split('-').map(i => parseInt(i));
+                        e.target.classList.add('black');
+                        arr[x][y] = 1;
+                        let display = document.getElementById('mnistVisualiser');
+                        for (let i = 1; i < 28; i++) {
+                            for (let j = 0; j < 28; j++) {
+                                const value = arr[i][j] * 255;
+                                display.children[i].children[j].style.backgroundColor = `rgb(${value},${value},${value})`;
+                            }
+                        }
+                        const pred = model.forward([new Tensor([arr.flat()])]).value.flat();
+                        const highest = argmax(pred);
+                        console.log(model.layers[1]);
+                        document.getElementById("prediction").innerHTML = `
+    <h2 class="mb-4">Prediction</h2>
+    <div class="alert alert-info" role="alert">
+        It seems to be <strong>${highest}</strong>
+    </div>
+    <div class="mt-4">
+        ${Object.entries(pred).map(([digit, probability]) => `
+            <div class="progress mb-3">
+                <div class="progress-bar" role="progressbar" style="width: ${probability * 100}%;"
+                    aria-valuenow="${probability * 100}" aria-valuemin="0" aria-valuemax="100">
+                    ${digit}
+                </div>
+            </div>
+        `).join('')}
+    </div>
+`;
+                        // 'I guess it is '+ argmax(model.forward([new Tensor([arr.flat()])]).value.flat() as any as number[]);
+                    }
+                }
+            });
+            pixel.addEventListener('pointerdown', (e) => {
+                draw = true;
+            });
+            window.addEventListener('pointerup', (e) => {
+                draw = false;
+            });
+        }
+        loadData();
+    }
+});
+/// <reference path="../TensorOperationsList.ts" />
+/// <reference path="../Tensor.ts" />
+/// <reference path="../Linear.ts" />
+/// <reference path="../Sequential.ts" />
+/// <reference path="../SGD.ts" />
+/// <reference path="../Metric.ts" />
+/// <reference path="../Trainer.ts" />
+function createNeuralNetwork() {
+    const net = new Sequential();
+    net.add(new Linear(784, 20, 'ReLU'));
+    net.add(new Linear(20, 10, "Softmax", false));
+    return net;
+}
+function createOptimizer(net) {
+    return new SGD(net.getParameters(), { lr: 1e-2, decay: 0 });
+}
+async function train(data) {
+    const net = createNeuralNetwork();
+    const optimiser = createOptimizer(net);
+    const loss = new CrossEntropy();
+    const metric = new Accuracy(100);
+    const trainer = new Trainer(net, optimiser, loss, metric);
+    trainer.onLoopDone = (loss, exp, out, loopNo, metric) => {
+        (loopNo % 100 == 0) && console.log(JSON.stringify(loss.value), metric);
+        if (metric > .90) {
+            var dataUri = "data:application/json;charset=utf-8;base64," + btoa(net.toJson());
+            document.getElementById('model').href = dataUri;
+        }
+    };
+    const x = data.map((v) => [v.slice(1)]);
+    const y = data.map((v) => [v[0]]);
+    trainer.train(x, y, true);
+    console.log(x);
+}
 document.addEventListener('DOMContentLoaded', () => {
     let table = document.getElementById('mnistVisualiser');
     for (let i = 0; i < 28; i++) {
@@ -770,7 +1143,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onloadend = () => {
             const lines = reader.result.split('\n');
             lines.forEach((line) => {
-                data.push([...line.split(',').map(n => parseFloat(n) / 255)]);
+                data.push([...line.split(',').map((n, i) => i == 0 ? parseInt(n) : Math.round(parseFloat(n) / 255))]);
             });
             let table = document.getElementById('mnistVisualiser');
             for (let i = 1; i < data[0].length; i++) {
@@ -780,9 +1153,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const value = data[0][i] * 255;
                 table.children[row].children[el].style.backgroundColor = `rgb(${value},${value},${value})`;
             }
-            setTimeout(() => {
-                train(data);
-            }, 1000);
+            train(data);
         };
     });
 });

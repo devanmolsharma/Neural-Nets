@@ -16,7 +16,7 @@ class Sequential extends Model {
         let res: Tensor;
         this._layers.forEach((layer, i) => {
             if (i == 0) res = layer.forward(params[0]);
-            else res = layer.forward(res);
+            else res = layer.forward(res);           
 
         })
 
