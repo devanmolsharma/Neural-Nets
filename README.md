@@ -8,6 +8,7 @@ This project is an implementation of neural networks from scratch in TypeScript.
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
 - [Usage](#usage)
+- [Demos](#demos)
 - [License](#license)
 
 ## Getting Started
@@ -39,7 +40,7 @@ Make sure you have the following installed on your machine:
    npm install
    ```
 
-# Demos
+## Demos
 
 🧠 MNIST Classifier! 🖋️
 
