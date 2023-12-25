@@ -6,11 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
-    
-    <script src="./Tensors.js"></script>
+
+    <script src="../Tensors.js"></script>
+    <script src="./demo.js"></script>
 </head>
 <style>
-
     #drawBase td {
         min-height: 2px;
         min-width: 2px;
@@ -25,7 +25,7 @@
     #out {
         margin: 50px;
 
-        flex:1;
+        flex: 1;
 
     }
 
@@ -37,7 +37,7 @@
     #drawBase {
         margin: 50px;
         height: 300px;
-        flex-basis:300px;
+        flex-basis: 300px;
         width: 300px;
         border: 1px solid black;
         border-collapse: collapse;
@@ -63,26 +63,35 @@
         background-color: rgba(0, 0, 0, 0.1);
     }
 
-    #main{
+    #main {
         display: flex;
+    }
+
+    #inp .btn.btn-primary {
+        margin-inline: 40px;
     }
 </style>
 
 <body>
     <div id="main">
-    <table id="drawBase">
-    </table>
+        <div id="inp">
+            <table id="drawBase">
+            </table>
 
-    <div id="out">
+            <button class="btn btn-primary" id="clear">Clear</button>
+        </div>
 
-        <Table id="mnistVisualiser">
-        </Table>
+        <div id="out">
+
+            <Table id="mnistVisualiser">
+            </Table>
 
 
-        <h3 id="prediction">
+            <h3 id="prediction">
 
-        </h3>
-    </div></div>
+            </h3>
+        </div>
+    </div>
 
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>

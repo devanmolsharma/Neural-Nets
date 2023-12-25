@@ -312,10 +312,10 @@ class Model extends Function {
                 value: tempValue
             });
         });
-        return JSON.stringify(j);
+        return j;
     }
     loadData(json) {
-        let params = JSON.parse(json);
+        let params = json;
         params.forEach((data) => {
             if (data.name === 'length')
                 return;
@@ -823,7 +823,7 @@ class Subtract extends TensorOperation {
 class CrossEntropy extends TensorOperation {
     // Helper function to subtract arrays element-wise
     static crossEntropy2DArrays(a, b) {
-        return a.map((v, i) => Array.isArray(v) ? this.crossEntropy2DArrays(v, b[i]) : (-Math.log(1 + 1e-8 - (v - b[i]) ** 2)));
+        return a.map((v, i) => Array.isArray(v) ? this.crossEntropy2DArrays(v, b[i]) : (-Math.log(1 + 1e-8 - (Math.min(v, 1) - b[i]) ** 2)));
     }
     static crossEntropyBack(a, b) {
         return a.map((v, i) => Array.isArray(v) ? this.crossEntropyBack(v, b[i]) : ((2 * (v - b[i])) / (1 + 1e-8 - ((v - b[i]) ** 2))));
@@ -1019,21 +1019,91 @@ class Trainer {
                 oneHot[exp] = 0.8;
                 exp = [oneHot];
             }
-            this.loop(inp, exp, i);
+            setTimeout(((inp, exp, i) => {
+                return () => this.loop(inp, exp, i);
+            })(inp, exp, i), 0);
         }
         this.onTrainingDone(this.net);
     }
 }
+function convertToModelCode(config) {
+    const modelCode = [];
+    // Create model
+    modelCode.push('var model = new Sequential();');
+    // Add layers
+    config.layers.forEach((layer) => {
+        modelCode.push(`model.add(new Linear(${layer.inputs},${layer.outputs},'${layer.activation}'));`);
+    });
+    // Create optimizer
+    const optimizerCode = `let opt = new SGD(model.getParameters(), {lr:${config.optimizer.learningRate || 1e-2}, decay:${config.optimizer.decay || 0.2}, minLr:${config.optimizer.minLr || 1e-4}});`;
+    modelCode.push(optimizerCode);
+    // Create loss
+    const lossCode = `let lossFn = new ${config.loss}();`;
+    modelCode.push(lossCode);
+    // Create metric
+    const metricCode = `const metric = new ${config.metric}(${config.metric === 'Accuracy' ? 100 : ''});`;
+    modelCode.push(metricCode);
+    // Create trainer
+    modelCode.push('var trainer = new Trainer(model, opt, lossFn, metric);');
+    return modelCode.join('\n');
+}
+async function loadModelFromJson(filePath) {
+    // var model;
+    const res = await fetch(filePath);
+    const parsedJson = await res.json();
+    const config = parsedJson[0];
+    const weights = parsedJson[1];
+    const modelCode = [];
+    // Create model
+    modelCode.push('var model = new Sequential();');
+    // Add layers
+    config.layers.forEach((layer) => {
+        modelCode.push(`model.add(new Linear(${layer.inputs},${layer.outputs},'${layer.activation}'));`);
+    });
+    const code = modelCode.join('\n');
+    eval(code);
+    // @ts-ignore
+    model.loadData(weights);
+    // @ts-ignore
+    return model;
+}
+async function loadModelData(net, jsonPath) {
+    net.loadData(await (await fetch(jsonPath)).text());
+}
+async function parseData(file) {
+    const reader = new FileReader();
+    reader.readAsText(file);
+    let data = [];
+    return await new Promise((resolve, reject) => {
+        reader.onloadend = () => {
+            const lines = reader.result.split('\n');
+            lines.forEach((line) => {
+                data.push([...line.split(',').map((n) => eval(n))]);
+            });
+            return resolve(data);
+        };
+    });
+}
 let draw = false;
 let arr = TensorUtils.filledArray([28, 28], 0);
-let model = createNeuralNetwork();
-function argmax(arr) {
-    return (arr).findIndex((v) => v == Math.max(...arr));
+var model;
+async function load() {
+    model = await loadModelFromJson('./mnist.json');
+    console.log('====================================');
+    console.log(model);
+    console.log('====================================');
 }
-async function loadData() {
-    model.loadData(await (await fetch('http://localhost/model.php')).text());
-}
+let brushSize = 1;
 document.addEventListener('DOMContentLoaded', () => {
+    load();
+    let table1 = document.getElementById('mnistVisualiser');
+    for (let i = 0; i < 28; i++) {
+        let tr = document.createElement('tr');
+        for (let j = 0; j < 28; j++) {
+            tr.innerHTML += '<td></td>';
+        }
+        table1.appendChild(tr);
+    }
     let table = document.getElementById('drawBase');
     if (table) {
         for (let i = 0; i < 28; i++) {
@@ -1044,38 +1114,56 @@ document.addEventListener('DOMContentLoaded', () => {
             table.appendChild(tr);
         }
         const pixels = document.getElementsByClassName('pixel');
+        document.getElementById('clear').addEventListener('click', () => {
+            arr = TensorUtils.filledArray([28, 28], 0);
+            for (const pixel of pixels) {
+                pixel.classList.contains('black') && pixel.classList.remove('black');
+            }
+        });
         for (const pixel of pixels) {
             pixel.addEventListener('pointermove', (e) => {
                 if (draw) {
-                    if (!e.target.classList.contains('black')) {
-                        const [x, y] = e.target.classList[1].split('-').map(i => parseInt(i));
-                        e.target.classList.add('black');
-                        arr[x][y] = 1;
+                    // Use the brushSize to update adjacent pixels
+                    const [x, y] = (e.target).classList[1].split('-').map(i => parseInt(i));
+                    for (let i = x - brushSize + 1; i <= x + brushSize - 1; i++) {
+                        for (let j = y - brushSize + 1; j <= y + brushSize - 1; j++) {
+                            if (i >= 0 && i < 28 && j >= 0 && j < 28) {
+                                const targetPixel = document.getElementsByClassName(`${i}-${j}`)[0];
+                                if (!targetPixel.classList.contains('black')) {
+                                    targetPixel.classList.add('black');
+                                    arr[i][j] = 1;
+                                }
+                            }
+                        }
+                        // Update the display
                         let display = document.getElementById('mnistVisualiser');
                         for (let i = 1; i < 28; i++) {
                             for (let j = 0; j < 28; j++) {
                                 const value = arr[i][j] * 255;
-                                display.children[i].children[j].style.backgroundColor = `rgb(${value},${value},${value})`;
+                                (display.children[i].children[j]).style.backgroundColor = `rgb(${value},${value},${value})`;
                             }
                         }
                         const pred = model.forward([new Tensor([arr.flat()])]).value.flat();
-                        const highest = argmax(pred);
+                        const highest = TensorUtils.argmax(pred);
                         console.log(model.layers[1]);
+                        console.log('====================================');
+                        console.log(pred);
+                        console.log('====================================');
                         document.getElementById("prediction").innerHTML = `
-    <h2 class="mb-4">Prediction</h2>
-    <div class="alert alert-info" role="alert">
-        It seems to be <strong>${highest}</strong>
-    </div>
-    <div class="mt-4">
-        ${Object.entries(pred).map(([digit, probability]) => `
-            <div class="progress mb-3">
-                <div class="progress-bar" role="progressbar" style="width: ${probability * 100}%;"
-                    aria-valuenow="${probability * 100}" aria-valuemin="0" aria-valuemax="100">
-                    ${digit}
-                </div>
-            </div>
-        `).join('')}
-    </div>
+                                    <h2 class="mb-4">Prediction</h2>
+                                    <div class="alert alert-info" role="alert">
+                                        It seems to be <strong>${highest}</strong>
+                                    </div>
+                                    <div class="mt-4">
+                                        ${Object.entries(pred).map(([digit, probability]) => `
+                                            <div class="progress mb-3">
+                                                <div class="progress-bar" role="progressbar" style="width: ${probability * 100}%;"
+                                                    aria-valuenow="${probability * 100}" aria-valuemin="0" aria-valuemax="100">
+                                                    ${digit}
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
 `;
                         // 'I guess it is '+ argmax(model.forward([new Tensor([arr.flat()])]).value.flat() as any as number[]);
                     }
@@ -1088,72 +1176,5 @@ document.addEventListener('DOMContentLoaded', () => {
                 draw = false;
             });
         }
-        loadData();
     }
-});
-/// <reference path="../TensorOperationsList.ts" />
-/// <reference path="../Tensor.ts" />
-/// <reference path="../Linear.ts" />
-/// <reference path="../Sequential.ts" />
-/// <reference path="../SGD.ts" />
-/// <reference path="../Metric.ts" />
-/// <reference path="../Trainer.ts" />
-function createNeuralNetwork() {
-    const net = new Sequential();
-    net.add(new Linear(784, 20, 'ReLU'));
-    net.add(new Linear(20, 10, "Softmax", false));
-    return net;
-}
-function createOptimizer(net) {
-    return new SGD(net.getParameters(), { lr: 1e-2, decay: 0 });
-}
-async function train(data) {
-    const net = createNeuralNetwork();
-    const optimiser = createOptimizer(net);
-    const loss = new CrossEntropy();
-    const metric = new Accuracy(100);
-    const trainer = new Trainer(net, optimiser, loss, metric);
-    trainer.onLoopDone = (loss, exp, out, loopNo, metric) => {
-        (loopNo % 100 == 0) && console.log(JSON.stringify(loss.value), metric);
-        if (metric > .90) {
-            var dataUri = "data:application/json;charset=utf-8;base64," + btoa(net.toJson());
-            document.getElementById('model').href = dataUri;
-        }
-    };
-    const x = data.map((v) => [v.slice(1)]);
-    const y = data.map((v) => [v[0]]);
-    trainer.train(x, y, true);
-    console.log(x);
-}
-document.addEventListener('DOMContentLoaded', () => {
-    let table = document.getElementById('mnistVisualiser');
-    for (let i = 0; i < 28; i++) {
-        let tr = document.createElement('tr');
-        for (let j = 0; j < 28; j++) {
-            tr.innerHTML += '<td></td>';
-        }
-        table.appendChild(tr);
-    }
-    document.getElementById('dataForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        let j = document.getElementById('data');
-        const reader = new FileReader();
-        reader.readAsText(j.files[0]);
-        let data = [];
-        reader.onloadend = () => {
-            const lines = reader.result.split('\n');
-            lines.forEach((line) => {
-                data.push([...line.split(',').map((n, i) => i == 0 ? parseInt(n) : Math.round(parseFloat(n) / 255))]);
-            });
-            let table = document.getElementById('mnistVisualiser');
-            for (let i = 1; i < data[0].length; i++) {
-                const count = i - 1;
-                let row = Math.floor(count / 28);
-                let el = count - 28 * row;
-                const value = data[0][i] * 255;
-                table.children[row].children[el].style.backgroundColor = `rgb(${value},${value},${value})`;
-            }
-            train(data);
-        };
-    });
 });

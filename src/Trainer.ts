@@ -1,7 +1,7 @@
 class Trainer {
     constructor(private net: Model, private optimiser: Optimiser, private loss: TensorOperation, private metric: Metric | null = null) { }
-    onTrainingDone(net:Model) :void{}
-    onLoopDone(loss:Tensor,expected:Tensor, out:Tensor,loopNo:number,metric:number) :void{}
+    onTrainingDone(net: Model): void { }
+    onLoopDone(loss: Tensor, expected: Tensor, out: Tensor, loopNo: number, metric: number): void { }
 
     loop(x: NumArray, y: NumArray, loopNo: number) {
         let out = this.net.forward([new Tensor(x)]);
@@ -21,25 +21,29 @@ class Trainer {
         }
 
 
-        this.onLoopDone(loss,expected, out,loopNo,this.calculateMetric(expected, out,loopNo))
+        this.onLoopDone(loss, expected, out, loopNo, this.calculateMetric(expected, out, loopNo))
     }
 
-    calculateMetric(expected:Tensor, out:Tensor,loopNo:number) { 
-        return this.metric.forward(expected,out,loopNo);
+    calculateMetric(expected: Tensor, out: Tensor, loopNo: number) {
+        return this.metric.forward(expected, out, loopNo);
     }
 
-    train(x: NumArray, y: NumArray, oneHotEncode: boolean = false) {        
+    train(x: NumArray, y: NumArray, oneHotEncode: boolean = false) {
 
         for (let i = 0; i < x.length; i++) {
             const inp = x[i];
             let exp = y[i];
             if (oneHotEncode) {
                 let oneHot = new Array(10).fill(0);
-    
+
                 oneHot[exp as number] = 0.8;
                 exp = [oneHot];
             }
-            this.loop(inp as NumArray,exp as NumArray,i)
+
+            setTimeout(((inp: NumArray, exp: NumArray, i: number): any => {
+                return () => this.loop(inp as NumArray, exp as NumArray, i)
+            })(inp as NumArray, exp as NumArray, i), 0)
+
         }
 
         this.onTrainingDone(this.net);

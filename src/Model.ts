@@ -51,11 +51,11 @@ abstract class Model extends Function {
                 value: tempValue
             })
         });
-        return JSON.stringify(j);
+        return j;
     }
 
-    public loadData(json: string) {
-        let params = JSON.parse(json);
+    public loadData(json: any) {
+        let params = json;
         params.forEach((data: any) => {
             if (data.name === 'length') return;
             if (data.name === 'name') return;

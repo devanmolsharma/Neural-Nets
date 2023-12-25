@@ -500,7 +500,7 @@ class CrossEntropy extends TensorOperation {
     private tensors: NumArray[];
     // Helper function to subtract arrays element-wise
     public static crossEntropy2DArrays(a: any, b: any) {
-        return a.map((v: any, i: any) => Array.isArray(v) ? this.crossEntropy2DArrays(v, b[i]) : (-Math.log(1 + 1e-8 - (v - b[i]) ** 2)));
+        return a.map((v: any, i: any) => Array.isArray(v) ? this.crossEntropy2DArrays(v, b[i]) : (-Math.log(1 + 1e-8 - (Math.min(v,1) - b[i]) ** 2)));
     }
 
 

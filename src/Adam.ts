@@ -15,5 +15,4 @@ class Adam extends Optimiser {
     step(): void {
         super.step();
     }
-
 }
