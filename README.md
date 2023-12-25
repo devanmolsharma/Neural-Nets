@@ -39,6 +39,15 @@ Make sure you have the following installed on your machine:
    npm install
    ```
 
+# Demos
+
+🧠 MNIST Classifier! 🖋️
+
+https://keep-up-sharma.github.io/Neural-Nets/compiled/Demos/Play.html
+
+⚒️ Model Builder 🛠️
+https://keep-up-sharma.github.io/Neural-Nets/compiled/UI/ModelBuilder.html
+
 ## Contributing
 
 Your contributions are welcome!
