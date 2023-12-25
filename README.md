@@ -46,7 +46,10 @@ Make sure you have the following installed on your machine:
 https://keep-up-sharma.github.io/Neural-Nets/compiled/Demos/Play.html
 
 ⚒️ Model Builder 🛠️
-https://keep-up-sharma.github.io/Neural-Nets/compiled/UI/ModelBuilder.html
+
+https://keep-up-sharma.github.io/Neural-Nets/compiled/UI/ModelBuilder.html 
+
+(tutorial soon...)
 
 ## Contributing
 
