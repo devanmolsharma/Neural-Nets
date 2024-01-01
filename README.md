@@ -12,7 +12,7 @@ This project is an implementation of neural networks from scratch in TypeScript.
 - [License](#license)
 
 ## Getting Started
-
+   
 ### Prerequisites
 
 Make sure you have the following installed on your machine:
