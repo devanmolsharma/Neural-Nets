@@ -44,11 +44,11 @@ Make sure you have the following installed on your machine:
 
 🧠 MNIST Classifier! 🖋️
 
-https://keep-up-sharma.github.io/Neural-Nets/compiled/Demos/Play.html
+https://devanmolsharma.github.io/Neural-Nets/compiled/Demos/Play.html
 
 ⚒️ Model Builder 🛠️
 
-https://keep-up-sharma.github.io/Neural-Nets/compiled/UI/ModelBuilder.html 
+https://devanmolsharma.github.io/Neural-Nets/compiled/UI/ModelBuilder.html 
 
 (tutorial soon...)
 
